@@ -35,6 +35,9 @@ import subprocess
 # Import local utility modules
 from utils import get_cache_dir, check_dependencies, format_file_size, log_memory_usage
 
+# Set up logging
+logger = logging.getLogger("Advanced_Analysis")
+
 # Check for tkcalendar
 try:
     from tkcalendar import DateEntry
@@ -85,8 +88,19 @@ try:
 except ImportError:
     SKLEARN_AVAILABLE = False
 
-# Set up logging
-logger = logging.getLogger("Advanced_Analysis")
+# Try to import ML Course Prediction integration
+try:
+    from ml_prediction_integration import (
+        MLPredictionIntegrator, 
+        MLPredictionError, 
+        is_available as ml_prediction_available
+    )
+    ML_PREDICTION_AVAILABLE = ml_prediction_available()
+except ImportError as e:
+    ML_PREDICTION_AVAILABLE = False
+    logger.warning(f"ML Course Prediction integration not available: {e}")
+
+
 
 
 # ============================================================================
@@ -3997,12 +4011,21 @@ class AdvancedAnalysisGUI:
         
         ttk.Button(frame1, text="Analyze", width=20,
                   command=self._extended_time_analysis).pack(side=tk.LEFT, padx=5)
-        
+
         frame2 = ttk.Frame(tab)
         frame2.pack(fill=tk.X, pady=5)
-        ttk.Button(frame2, text="AI Predicted Path (Coming Soon)", width=30,
-                  command=lambda: messagebox.showinfo("Coming Soon", 
-                  "AI path prediction feature will be available in a future release.")).pack(side=tk.LEFT, padx=5)
+        if ML_PREDICTION_AVAILABLE:
+            ttk.Button(frame2, text="AI Predicted Path", width=30,
+                      command=self._ml_course_prediction).pack(side=tk.LEFT, padx=5)
+        else:
+            ttk.Button(frame2, text="AI Predicted Path (ML Module Not Available)", width=50,
+                      command=lambda: messagebox.showwarning("Not Available", 
+                      "ML Course Prediction module is not available. Please ensure PyTorch and ml_course_prediction module are installed.")).pack(side=tk.LEFT, padx=5)
+                              # frame2 = ttk.Frame(tab)
+        # frame2.pack(fill=tk.X, pady=5)
+        # ttk.Button(frame2, text="AI Predicted Path (Coming Soon)", width=30,
+        #           command=lambda: messagebox.showinfo("Coming Soon", 
+        #           "AI path prediction feature will be available in a future release.")).pack(side=tk.LEFT, padx=5)
     
     def _export_full_dataset(self):
         progress = ProgressDialog(self.window, "Exporting Dataset", "Exporting full dataset to CSV...")
@@ -4905,6 +4928,158 @@ class AdvancedAnalysisGUI:
             logger.error(f"Error in extended analysis: {e}")
             logger.error(traceback.format_exc())
             messagebox.showerror("Error", f"Analysis failed: {str(e)}")
+
+    def _ml_course_prediction(self):
+        """Perform ML-based course prediction for a vessel"""
+        mmsi_str = self.extended_mmsi_var.get()
+        
+        if not mmsi_str:
+            messagebox.showerror("Error", "Please enter an MMSI number in the field above")
+            return
+        
+        try:
+            mmsi = int(mmsi_str)
+        except ValueError:
+            messagebox.showerror("Error", "MMSI must be a number")
+            return
+        
+        progress = ProgressDialog(self.window, "ML Course Prediction", 
+                                 f"Predicting course for vessel {mmsi}...")
+        try:
+            self.status_var.set(f"Loading data for vessel {mmsi}...")
+            
+            # Load cached data
+            df = self.analysis.load_cached_data()
+            if df.empty:
+                progress.close()
+                messagebox.showerror("Error", "No cached data available. Please run an analysis first.")
+                return
+            
+            self.status_var.set(f"Initializing ML prediction...")
+            
+            # Create integrator
+            integrator = MLPredictionIntegrator()
+            
+            self.status_var.set(f"Generating predictions for vessel {mmsi}...")
+            
+            # Run prediction pipeline
+            result = integrator.predict_vessel_course(df, mmsi, hours_back=24)
+            
+            progress.close()
+            
+            # Display results
+            self._display_prediction_results(result)
+            
+            self.status_var.set(f"Prediction complete for vessel {mmsi}")
+            
+        except MLPredictionError as e:
+            progress.close()
+            self.status_var.set("Prediction failed")
+            logger.error(f"ML Prediction Error: {e}")
+            messagebox.showerror("Prediction Error", str(e))
+        except Exception as e:
+            progress.close()
+            self.status_var.set("Prediction failed")
+            logger.error(f"Error in ML course prediction: {e}")
+            logger.error(traceback.format_exc())
+            messagebox.showerror("Error", f"Prediction failed: {str(e)}\n\nCheck logs for details.")
+    
+    def _display_prediction_results(self, result: dict):
+        """Display prediction results on a map"""
+        mmsi = result['mmsi']
+        predictions = result['predictions']
+        trajectory = result['trajectory']
+        last_lat, last_lon = result['last_position']
+        last_time = result['last_time']
+        
+        position_mean = predictions['position_mean']
+        position_lower = predictions['position_lower']
+        position_upper = predictions['position_upper']
+        
+        if not FOLIUM_AVAILABLE:
+            # Fallback to text display
+            result_text = f"Prediction Results for Vessel {mmsi}\n\n"
+            result_text += f"Last Known Position: ({last_lat:.4f}, {last_lon:.4f})\n"
+            if last_time:
+                result_text += f"Last Known Time: {last_time}\n"
+            result_text += f"\nPredicted Positions (48 hours ahead):\n"
+            for i, (lat, lon) in enumerate(position_mean):
+                hours_ahead = (i + 1) * 6  # Assuming 6-hour intervals
+                result_text += f"  +{hours_ahead}h: ({lat:.4f}, {lon:.4f})\n"
+            messagebox.showinfo("Prediction Results", result_text)
+            return
+        
+        try:
+            # Create map centered on last known position
+            m = folium.Map(location=[last_lat, last_lon], zoom_start=10)
+            
+            # Add historical trajectory
+            traj_points = list(zip(trajectory['LAT'].values, trajectory['LON'].values))
+            folium.PolyLine(traj_points, color='blue', weight=3, opacity=0.7,
+                          popup=f"Historical Path - Vessel {mmsi}").add_to(m)
+            
+            # Add last known position marker
+            popup_text = f"Last Known Position<br>Vessel: {mmsi}"
+            if last_time:
+                popup_text += f"<br>Time: {last_time}"
+            folium.Marker(
+                [last_lat, last_lon],
+                popup=popup_text,
+                icon=folium.Icon(color='red', icon='info-sign')
+            ).add_to(m)
+            
+            # Add predicted path with uncertainty
+            pred_points = [(lat, lon) for lat, lon in position_mean]
+            folium.PolyLine(pred_points, color='green', weight=3, opacity=0.8,
+                          popup="Predicted Path (48 hours)").add_to(m)
+            
+            # Add uncertainty bounds
+            lower_points = [(lat, lon) for lat, lon in position_lower]
+            upper_points = [(lat, lon) for lat, lon in position_upper]
+            folium.PolyLine(lower_points, color='orange', weight=2, opacity=0.5,
+                          dashArray='5, 5', popup="Lower 68% Confidence").add_to(m)
+            folium.PolyLine(upper_points, color='orange', weight=2, opacity=0.5,
+                          dashArray='5, 5', popup="Upper 68% Confidence").add_to(m)
+            
+            # Add predicted position markers
+            for i, (lat, lon) in enumerate(position_mean):
+                hours_ahead = (i + 1) * 6  # Assuming 6-hour intervals
+                std_text = f"±{predictions['position_std'][i].mean():.3f}°"
+                folium.CircleMarker(
+                    [lat, lon],
+                    radius=5,
+                    popup=f"Predicted Position<br>+{hours_ahead} hours<br>Uncertainty: {std_text}",
+                    color='green',
+                    fill=True
+                ).add_to(m)
+            
+            # Save map
+            try:
+                output_dir = Path(self.analysis.config.get('DEFAULT', 'output_directory', 
+                                                          fallback=os.getcwd()))
+            except:
+                output_dir = Path(os.getcwd())
+            
+            output_dir.mkdir(parents=True, exist_ok=True)
+            map_path = output_dir / f"ml_prediction_vessel_{mmsi}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
+            m.save(str(map_path))
+            
+            # Show success message and open map
+            messagebox.showinfo("Prediction Complete", 
+                              f"ML Course Prediction complete for vessel {mmsi}!\n\n"
+                              f"Map saved to: {map_path}\n\n"
+                              f"The map shows:\n"
+                              f"- Blue line: Historical trajectory\n"
+                              f"- Red marker: Last known position\n"
+                              f"- Green line: Predicted path (48 hours)\n"
+                              f"- Orange lines: 68% confidence intervals")
+            
+            open_file(str(map_path))
+            
+        except Exception as e:
+            logger.error(f"Error displaying prediction results: {e}")
+            logger.error(traceback.format_exc())
+            messagebox.showerror("Error", f"Failed to create visualization: {str(e)}")    
     
     def _run_anomaly_analysis(self):
         """Run analysis based on selected anomaly types"""
