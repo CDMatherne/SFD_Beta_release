@@ -2976,3 +2976,131 @@ Validation Metrics:
 Epoch 75/100
 2025-11-26 08:20:23,204 - ml_course_prediction.training.trainer - INFO - ------------------------------------------------------------
 2025-11-26 08:33:57,285 - ml_course_prediction.training.trainer - INFO -   Batch 100/568, Loss: 25.8047
+2025-11-26 08:47:29,020 - ml_course_prediction.training.trainer - INFO -   Batch 200/568, Loss: 30.5697
+2025-11-26 09:01:27,577 - ml_course_prediction.training.trainer - INFO -   Batch 300/568, Loss: 44.1716
+2025-11-26 09:15:20,817 - ml_course_prediction.training.trainer - INFO -   Batch 400/568, Loss: 35.3263
+2025-11-26 09:30:44,769 - ml_course_prediction.training.trainer - INFO -   Batch 500/568, Loss: 30.2788
+2025-11-26 09:40:11,079 - ml_course_prediction.training.trainer - INFO - Train Loss: 34.6620
+2025-11-26 09:40:11,079 - ml_course_prediction.training.trainer - INFO -   Position: 20.4765, Speed: 22.5458, Course: 0.8441, Uncertainty: 8.3018, Physics: 0.0000
+2025-11-26 09:41:53,627 - ml_course_prediction.training.trainer - INFO - Val Loss: 15.5804
+2025-11-26 09:41:53,628 - ml_course_prediction.training.trainer - INFO -   Position: 1.5282, Speed: 22.5180, Course: 0.8493, Uncertainty: 7.8953, Physics: 0.0000
+2025-11-26 09:41:53,628 - ml_course_prediction.training.trainer - INFO - 
+Validation Metrics:
+2025-11-26 09:41:53,628 - ml_course_prediction.training.trainer - INFO -   MAE: 71.08 nm, RMSE: 97.81 nm
+2025-11-26 09:41:53,632 - ml_course_prediction.training.trainer - INFO - Learning rate: 0.000031
+2025-11-26 09:41:53,678 - ml_course_prediction.training.trainer - INFO - Saved checkpoint: C:\Users\chris\OneDrive\Documents\AIS-LLM\LLMWorking_Folder\LLMv1\LLM-MLv1\ml_course_prediction\models\trained\checkpoint_epoch75.pt
+2025-11-26 09:41:53,679 - ml_course_prediction.training.trainer - INFO - 
+Epoch 76/100
+2025-11-26 09:41:53,679 - ml_course_prediction.training.trainer - INFO - ------------------------------------------------------------
+2025-11-26 09:56:00,772 - ml_course_prediction.training.trainer - INFO -   Batch 100/568, Loss: 48.2358
+2025-11-26 10:09:43,111 - ml_course_prediction.training.trainer - INFO -   Batch 200/568, Loss: 40.8384
+2025-11-26 10:23:26,201 - ml_course_prediction.training.trainer - INFO -   Batch 300/568, Loss: 43.7431
+2025-11-26 10:37:13,015 - ml_course_prediction.training.trainer - INFO -   Batch 400/568, Loss: 30.9650
+2025-11-26 10:50:51,675 - ml_course_prediction.training.trainer - INFO -   Batch 500/568, Loss: 34.1577
+2025-11-26 11:00:21,557 - ml_course_prediction.training.trainer - INFO - Train Loss: 34.5609
+2025-11-26 11:00:21,557 - ml_course_prediction.training.trainer - INFO -   Position: 20.3602, Speed: 22.5769, Course: 0.8452, Uncertainty: 8.2986, Physics: 0.0000
+2025-11-26 11:02:06,975 - ml_course_prediction.training.trainer - INFO - Val Loss: 15.5811
+2025-11-26 11:02:06,976 - ml_course_prediction.training.trainer - INFO -   Position: 1.5222, Speed: 22.5367, Course: 0.8514, Uncertainty: 7.8829, Physics: 0.0000
+2025-11-26 11:02:06,976 - ml_course_prediction.training.trainer - INFO - 
+Validation Metrics:
+2025-11-26 11:02:06,976 - ml_course_prediction.training.trainer - INFO -   MAE: 69.53 nm, RMSE: 98.34 nm
+2025-11-26 11:02:06,981 - ml_course_prediction.training.trainer - INFO - Learning rate: 0.000031
+2025-11-26 11:02:07,031 - ml_course_prediction.training.trainer - INFO - Saved checkpoint: C:\Users\chris\OneDrive\Documents\AIS-LLM\LLMWorking_Folder\LLMv1\LLM-MLv1\ml_course_prediction\models\trained\checkpoint_epoch76.pt
+2025-11-26 11:02:07,032 - ml_course_prediction.training.trainer - INFO - 
+Epoch 77/100
+2025-11-26 11:02:07,032 - ml_course_prediction.training.trainer - INFO - ------------------------------------------------------------
+2025-11-26 11:16:00,385 - ml_course_prediction.training.trainer - INFO -   Batch 100/568, Loss: 28.6597
+2025-11-26 11:29:48,482 - ml_course_prediction.training.trainer - INFO -   Batch 200/568, Loss: 26.3416
+2025-11-26 11:43:30,635 - ml_course_prediction.training.trainer - INFO -   Batch 300/568, Loss: 36.3254
+2025-11-26 11:57:25,560 - ml_course_prediction.training.trainer - INFO -   Batch 400/568, Loss: 23.2866
+2025-11-26 12:11:13,313 - ml_course_prediction.training.trainer - INFO -   Batch 500/568, Loss: 45.5615
+2025-11-26 12:20:40,222 - ml_course_prediction.training.trainer - INFO - Train Loss: 34.6102
+2025-11-26 12:20:40,230 - ml_course_prediction.training.trainer - INFO -   Position: 20.3738, Speed: 22.6427, Course: 0.8457, Uncertainty: 8.3071, Physics: 0.0000
+2025-11-26 12:22:28,409 - ml_course_prediction.training.trainer - INFO - Val Loss: 15.4442
+2025-11-26 12:22:28,409 - ml_course_prediction.training.trainer - INFO -   Position: 1.5357, Speed: 22.2309, Course: 0.8472, Uncertainty: 7.8984, Physics: 0.0000
+2025-11-26 12:22:28,410 - ml_course_prediction.training.trainer - INFO - 
+Validation Metrics:
+2025-11-26 12:22:28,410 - ml_course_prediction.training.trainer - INFO -   MAE: 71.75 nm, RMSE: 99.67 nm
+2025-11-26 12:22:28,418 - ml_course_prediction.training.trainer - INFO - Learning rate: 0.000016
+2025-11-26 12:22:28,496 - ml_course_prediction.training.trainer - INFO - Saved checkpoint: C:\Users\chris\OneDrive\Documents\AIS-LLM\LLMWorking_Folder\LLMv1\LLM-MLv1\ml_course_prediction\models\trained\checkpoint_epoch77.pt
+2025-11-26 12:22:28,497 - ml_course_prediction.training.trainer - INFO - 
+Epoch 78/100
+2025-11-26 12:22:28,497 - ml_course_prediction.training.trainer - INFO - ------------------------------------------------------------
+2025-11-26 12:36:37,114 - ml_course_prediction.training.trainer - INFO -   Batch 100/568, Loss: 24.8980
+2025-11-26 12:50:58,947 - ml_course_prediction.training.trainer - INFO -   Batch 200/568, Loss: 38.2116
+2025-11-26 13:05:08,908 - ml_course_prediction.training.trainer - INFO -   Batch 300/568, Loss: 31.2649
+2025-11-26 13:19:09,867 - ml_course_prediction.training.trainer - INFO -   Batch 400/568, Loss: 32.6876
+2025-11-26 13:33:06,711 - ml_course_prediction.training.trainer - INFO -   Batch 500/568, Loss: 35.0870
+2025-11-26 13:42:34,853 - ml_course_prediction.training.trainer - INFO - Train Loss: 34.2492
+2025-11-26 13:42:34,855 - ml_course_prediction.training.trainer - INFO -   Position: 20.1118, Speed: 22.4512, Course: 0.8444, Uncertainty: 8.2987, Physics: 0.0000
+2025-11-26 13:44:20,092 - ml_course_prediction.training.trainer - INFO - Val Loss: 15.5169
+2025-11-26 13:44:20,092 - ml_course_prediction.training.trainer - INFO -   Position: 1.6027, Speed: 22.2419, Course: 0.8487, Uncertainty: 7.8965, Physics: 0.0000
+2025-11-26 13:44:20,093 - ml_course_prediction.training.trainer - INFO - 
+Validation Metrics:
+2025-11-26 13:44:20,093 - ml_course_prediction.training.trainer - INFO -   MAE: 73.81 nm, RMSE: 100.45 nm
+2025-11-26 13:44:20,103 - ml_course_prediction.training.trainer - INFO - Learning rate: 0.000016
+2025-11-26 13:44:20,186 - ml_course_prediction.training.trainer - INFO - Saved checkpoint: C:\Users\chris\OneDrive\Documents\AIS-LLM\LLMWorking_Folder\LLMv1\LLM-MLv1\ml_course_prediction\models\trained\checkpoint_epoch78.pt
+2025-11-26 13:44:20,186 - ml_course_prediction.training.trainer - INFO - 
+Epoch 79/100
+2025-11-26 13:44:20,187 - ml_course_prediction.training.trainer - INFO - ------------------------------------------------------------
+2025-11-26 13:58:30,179 - ml_course_prediction.training.trainer - INFO -   Batch 100/568, Loss: 28.4057
+2025-11-26 14:12:36,771 - ml_course_prediction.training.trainer - INFO -   Batch 200/568, Loss: 36.8024
+2025-11-26 14:26:36,549 - ml_course_prediction.training.trainer - INFO -   Batch 300/568, Loss: 41.7588
+2025-11-26 14:40:46,311 - ml_course_prediction.training.trainer - INFO -   Batch 400/568, Loss: 34.6232
+2025-11-26 14:54:52,635 - ml_course_prediction.training.trainer - INFO -   Batch 500/568, Loss: 37.7178
+2025-11-26 15:04:18,399 - ml_course_prediction.training.trainer - INFO - Train Loss: 34.3841
+2025-11-26 15:04:18,399 - ml_course_prediction.training.trainer - INFO -   Position: 20.1704, Speed: 22.6042, Course: 0.8450, Uncertainty: 8.2970, Physics: 0.0000
+2025-11-26 15:06:02,255 - ml_course_prediction.training.trainer - INFO - Val Loss: 15.4202
+2025-11-26 15:06:02,256 - ml_course_prediction.training.trainer - INFO -   Position: 1.5316, Speed: 22.1902, Course: 0.8473, Uncertainty: 7.8994, Physics: 0.0000
+2025-11-26 15:06:02,256 - ml_course_prediction.training.trainer - INFO - 
+Validation Metrics:
+2025-11-26 15:06:02,256 - ml_course_prediction.training.trainer - INFO -   MAE: 71.09 nm, RMSE: 98.56 nm
+2025-11-26 15:06:02,264 - ml_course_prediction.training.trainer - INFO - Learning rate: 0.000016
+2025-11-26 15:06:02,342 - ml_course_prediction.training.trainer - INFO - Saved checkpoint: C:\Users\chris\OneDrive\Documents\AIS-LLM\LLMWorking_Folder\LLMv1\LLM-MLv1\ml_course_prediction\models\trained\checkpoint_epoch79.pt
+2025-11-26 15:06:02,342 - ml_course_prediction.training.trainer - INFO - 
+Epoch 80/100
+2025-11-26 15:06:02,343 - ml_course_prediction.training.trainer - INFO - ------------------------------------------------------------
+2025-11-26 15:20:10,605 - ml_course_prediction.training.trainer - INFO -   Batch 100/568, Loss: 44.2036
+2025-11-26 15:34:20,368 - ml_course_prediction.training.trainer - INFO -   Batch 200/568, Loss: 37.9180
+2025-11-26 15:48:20,704 - ml_course_prediction.training.trainer - INFO -   Batch 300/568, Loss: 34.5811
+2025-11-26 16:02:26,764 - ml_course_prediction.training.trainer - INFO -   Batch 400/568, Loss: 30.0446
+2025-11-26 16:16:16,830 - ml_course_prediction.training.trainer - INFO -   Batch 500/568, Loss: 41.1796
+2025-11-26 16:25:36,122 - ml_course_prediction.training.trainer - INFO - Train Loss: 34.5430
+2025-11-26 16:25:36,122 - ml_course_prediction.training.trainer - INFO -   Position: 20.3974, Speed: 22.4696, Course: 0.8451, Uncertainty: 8.2943, Physics: 0.0000
+2025-11-26 16:27:20,553 - ml_course_prediction.training.trainer - INFO - Val Loss: 15.4510
+2025-11-26 16:27:20,553 - ml_course_prediction.training.trainer - INFO -   Position: 1.5596, Speed: 22.2037, Course: 0.8474, Uncertainty: 7.8863, Physics: 0.0000
+2025-11-26 16:27:20,554 - ml_course_prediction.training.trainer - INFO - 
+Validation Metrics:
+2025-11-26 16:27:20,554 - ml_course_prediction.training.trainer - INFO -   MAE: 70.93 nm, RMSE: 98.78 nm
+2025-11-26 16:27:20,563 - ml_course_prediction.training.trainer - INFO - Learning rate: 0.000016
+2025-11-26 16:27:20,639 - ml_course_prediction.training.trainer - INFO - Saved checkpoint: C:\Users\chris\OneDrive\Documents\AIS-LLM\LLMWorking_Folder\LLMv1\LLM-MLv1\ml_course_prediction\models\trained\checkpoint_epoch80.pt
+2025-11-26 16:27:20,639 - ml_course_prediction.training.trainer - INFO - 
+Epoch 81/100
+2025-11-26 16:27:20,639 - ml_course_prediction.training.trainer - INFO - ------------------------------------------------------------
+2025-11-26 16:41:24,486 - ml_course_prediction.training.trainer - INFO -   Batch 100/568, Loss: 29.7180
+2025-11-26 16:55:34,804 - ml_course_prediction.training.trainer - INFO -   Batch 200/568, Loss: 34.9055
+2025-11-26 17:09:20,446 - ml_course_prediction.training.trainer - INFO -   Batch 300/568, Loss: 31.7249
+2025-11-26 17:23:20,455 - ml_course_prediction.training.trainer - INFO -   Batch 400/568, Loss: 35.7855
+2025-11-26 17:37:22,565 - ml_course_prediction.training.trainer - INFO -   Batch 500/568, Loss: 33.0379
+2025-11-26 17:46:54,031 - ml_course_prediction.training.trainer - INFO - Train Loss: 34.2397
+2025-11-26 17:46:54,032 - ml_course_prediction.training.trainer - INFO -   Position: 20.1121, Speed: 22.4254, Course: 0.8466, Uncertainty: 8.3052, Physics: 0.0000
+2025-11-26 17:48:39,507 - ml_course_prediction.training.trainer - INFO - Val Loss: 15.7990
+2025-11-26 17:48:39,507 - ml_course_prediction.training.trainer - INFO -   Position: 1.8909, Speed: 22.2317, Course: 0.8477, Uncertainty: 7.8946, Physics: 0.0000
+2025-11-26 17:48:39,508 - ml_course_prediction.training.trainer - INFO - 
+Validation Metrics:
+2025-11-26 17:48:39,508 - ml_course_prediction.training.trainer - INFO -   MAE: 83.44 nm, RMSE: 108.22 nm
+2025-11-26 17:48:39,517 - ml_course_prediction.training.trainer - INFO - Learning rate: 0.000016
+2025-11-26 17:48:39,590 - ml_course_prediction.training.trainer - INFO - Saved checkpoint: C:\Users\chris\OneDrive\Documents\AIS-LLM\LLMWorking_Folder\LLMv1\LLM-MLv1\ml_course_prediction\models\trained\checkpoint_epoch81.pt
+2025-11-26 17:48:39,591 - ml_course_prediction.training.trainer - INFO - 
+Early stopping triggered after 81 epochs
+2025-11-26 17:48:39,591 - ml_course_prediction.training.trainer - INFO - No improvement for 10 epochs
+2025-11-26 17:48:39,592 - ml_course_prediction.training.trainer - INFO - 
+============================================================
+2025-11-26 17:48:39,592 - ml_course_prediction.training.trainer - INFO - Training Complete!
+2025-11-26 17:48:39,592 - ml_course_prediction.training.trainer - INFO - Best validation loss: 15.3570
+2025-11-26 17:48:39,592 - ml_course_prediction.training.trainer - INFO - ============================================================
+2025-11-26 17:48:39,623 - ml_course_prediction.training.trainer - INFO - Saved training history: C:\Users\chris\OneDrive\Documents\AIS-LLM\LLMWorking_Folder\LLMv1\LLM-MLv1\ml_course_prediction\models\trained\training_history.json
+2025-11-26 17:48:39,625 - __main__ - INFO - 
+============================================================
+2025-11-26 17:48:39,626 - __main__ - INFO - Training Complete!
+2025-11-26 17:48:39,626 - __main__ - INFO - ============================================================

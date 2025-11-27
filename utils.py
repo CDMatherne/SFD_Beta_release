@@ -82,15 +82,40 @@ def check_dependencies(requirements_file='requirements.txt', silent=False, offer
                 line = line.strip()
                 if line and not line.startswith('#') and not line.startswith('-e'):
                     # Parse requirement line
+                    condition = None
                     if ';' in line:
                         req, condition = line.split(';', 1)
                         req = req.strip()
                         condition = condition.strip()
                         
+                        # Check platform-specific requirements
                         if 'platform_system==' in condition:
                             platform_name = condition.split('==')[1].strip().strip("'").strip('"')
                             if platform.system() != platform_name:
                                 continue
+                        
+                        # Check Python version requirements
+                        if 'python_version' in condition:
+                            # Extract version requirement (e.g., "< '3.8'" or "python_version < '3.8'")
+                            # Simple parsing for common patterns
+                            current_major = sys.version_info.major
+                            current_minor = sys.version_info.minor
+                            
+                            # Look for version pattern like "< '3.8'" or "> '3.8'"
+                            should_include = True
+                            if "< '3.8'" in condition or '< "3.8"' in condition:
+                                # Only include if Python < 3.8
+                                should_include = (current_major, current_minor) < (3, 8)
+                            elif "> '3.8'" in condition or '> "3.8"' in condition:
+                                # Only include if Python > 3.8
+                                should_include = (current_major, current_minor) > (3, 8)
+                            elif "<='3.8'" in condition or '<="3.8"' in condition:
+                                should_include = (current_major, current_minor) <= (3, 8)
+                            elif ">='3.8'" in condition or '>="3.8"' in condition:
+                                should_include = (current_major, current_minor) >= (3, 8)
+                            
+                            if not should_include:
+                                continue  # Skip this requirement
                     else:
                         req = line
                     
@@ -109,7 +134,44 @@ def check_dependencies(requirements_file='requirements.txt', silent=False, offer
         # Check installed packages
         missing = []
         import_module = importlib.import_module  # Store reference to the function
+        
+        # Special handling for packages where package name != import name
+        package_import_map = {
+            'concurrent-futures': 'concurrent.futures',  # Package name vs import name
+            'pywin32': 'win32api',  # pywin32 package imports as win32api
+        }
+        
         for req in requirements:
+            # Check if this is a special case
+            if req in package_import_map:
+                import_name = package_import_map[req]
+                try:
+                    import_module(import_name)
+                    continue  # Successfully imported, skip to next requirement
+                except ImportError:
+                    # Check if package is installed via metadata
+                    try:
+                        import importlib.metadata as imp_metadata
+                        try:
+                            imp_metadata.version(req)
+                            continue  # Package installed, skip to next
+                        except imp_metadata.PackageNotFoundError:
+                            pass
+                    except ImportError:
+                        try:
+                            import pkg_resources
+                            try:
+                                pkg_resources.get_distribution(req)
+                                continue  # Package installed, skip to next
+                            except pkg_resources.DistributionNotFound:
+                                pass
+                        except ImportError:
+                            pass
+                    # If we get here, package is missing
+                    missing.append(req)
+                    continue
+            
+            # Standard package checking
             try:
                 import_module(req.lower().replace('-', '_'))
             except ImportError:

@@ -25,9 +25,10 @@ import hashlib
 import json
 import re
 import time
+import math
 from utils import validate_config
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import ttk, messagebox, filedialog, simpledialog
 import traceback
 import platform
 import subprocess
@@ -83,7 +84,7 @@ except ImportError:
     SEABORN_AVAILABLE = False
 
 try:
-    from sklearn.cluster import KMeans
+    from sklearn.cluster import KMeans  # type: ignore
     SKLEARN_AVAILABLE = True
 except ImportError:
     SKLEARN_AVAILABLE = False
@@ -98,6 +99,10 @@ try:
     ML_PREDICTION_AVAILABLE = ml_prediction_available()
 except ImportError as e:
     ML_PREDICTION_AVAILABLE = False
+    # Define a fallback exception class if import fails
+    class MLPredictionError(Exception):
+        """Fallback exception if ML prediction module is not available"""
+        pass
     logger.warning(f"ML Course Prediction integration not available: {e}")
 
 
@@ -152,35 +157,6 @@ def get_config_path(config_path='config.ini'):
     return abs_config_path
 
 
-# def validate_config(config_path='config.ini'):
-#     """Validate that config.ini exists and contains required sections."""
-#     # Resolve config path relative to script directory
-#     config_path = get_config_path(config_path)
-    
-#     if not os.path.exists(config_path):
-#         return False, f"Config file not found: {config_path}"
-    
-#     try:
-#         config = configparser.ConfigParser()
-#         config.read(config_path)
-        
-#         required_sections = ['DEFAULT']
-#         missing_sections = [s for s in required_sections if s not in config]
-        
-#         if missing_sections:
-#             return False, f"Missing required config sections: {', '.join(missing_sections)}"
-        
-#         output_dir = config.get('DEFAULT', 'output_directory', fallback=None)
-#         if not output_dir:
-#             output_dir = config.get('Paths', 'output_directory', fallback=None)
-        
-#         if not output_dir:
-#             return False, "Output directory not specified in config.ini"
-        
-#         return True, None
-        
-#     except Exception as e:
-#         return False, f"Error reading config file: {str(e)}"
 
 
 def validate_data_availability(run_info):
@@ -234,28 +210,6 @@ def validate_data_availability(run_info):
     return True, None, warnings
 
 
-# def get_memory_usage():
-#     """Get current memory usage information."""
-#     try:
-#         import psutil
-#         process = psutil.Process(os.getpid())
-#         mem_info = process.memory_info()
-#         return {
-#             'rss_mb': mem_info.rss / (1024 * 1024),
-#             'vms_mb': mem_info.vms / (1024 * 1024),
-#             'percent': process.memory_percent()
-#         }
-#     except ImportError:
-#         return {'rss_mb': 'N/A', 'vms_mb': 'N/A', 'percent': 'N/A'}
-#     except Exception:
-#         return {'rss_mb': 'N/A', 'vms_mb': 'N/A', 'percent': 'N/A'}
-
-
-# def log_memory_usage(operation_name=""):
-#     """Log current memory usage."""
-#     mem_usage = get_memory_usage()
-#     logger.info(f"Memory usage {operation_name}: RSS={mem_usage.get('rss_mb', 'N/A')} MB, "
-#                f"Percent={mem_usage.get('percent', 'N/A')}%")
 
 
 def cleanup_large_dataframe(df, keep_columns=None):
@@ -288,13 +242,6 @@ def cleanup_large_dataframe(df, keep_columns=None):
     return df
 
 
-# def format_file_size(size_bytes):
-#     """Format file size in human-readable format."""
-#     for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-#         if size_bytes < 1024.0:
-#             return f"{size_bytes:.2f} {unit}"
-#         size_bytes /= 1024.0
-#     return f"{size_bytes:.2f} PB"
 
 
 def get_all_vessel_types():
@@ -456,23 +403,6 @@ def validate_date_range(start_date, end_date):
         return False, f"Invalid date format: {e}"
 
 
-# def check_dependencies():
-#     """Check if all required dependencies are available."""
-#     dependencies = {
-#         'pandas': False, 'numpy': False, 'folium': False, 'plotly': False,
-#         'matplotlib': False, 'sklearn': False, 'openpyxl': False,
-#     }
-    
-#     for dep in dependencies.keys():
-#         try:
-#             __import__(dep)
-#             dependencies[dep] = True
-#         except ImportError:
-#             dependencies[dep] = False
-    
-#     return dependencies
-
-
 def get_dependency_warnings():
     """Get warnings about missing optional dependencies."""
     warnings = []
@@ -501,13 +431,6 @@ def get_dependency_warnings():
 # ============================================================================
 # DATA ACCESS LAYER
 # ============================================================================
-
-# def get_cache_dir():
-#     """Get the directory to use for caching data."""
-#     home_dir = os.path.expanduser("~")
-#     cache_dir = os.path.join(home_dir, ".ais_data_cache")
-#     return cache_dir
-
 
 def get_last_run_info(config_path='config.ini'):
     """Extract information about the last analysis run from config.ini."""
@@ -542,8 +465,11 @@ def get_last_run_info(config_path='config.ini'):
                                 fallback=get_config_value('Paths', 'output_directory', 
                                                         fallback=default_output))
     
-    start_date = get_config_value('DEFAULT', 'start_date', fallback='2024-10-15')
-    end_date = get_config_value('DEFAULT', 'end_date', fallback='2024-10-17')
+    # Try START_DATE/END_DATE first (as saved by SFD_GUI.py), then start_date/end_date, then fallback
+    start_date = get_config_value('DEFAULT', 'START_DATE', 
+                                 fallback=get_config_value('DEFAULT', 'start_date', fallback='2024-10-01'))
+    end_date = get_config_value('DEFAULT', 'END_DATE',
+                               fallback=get_config_value('DEFAULT', 'end_date', fallback='2024-10-03'))
     
     data_dir = get_config_value('DEFAULT', 'data_directory',
                                fallback=get_config_value('Paths', 'data_directory', fallback=''))
@@ -822,6 +748,33 @@ class AdvancedAnalysis:
         logger.info(f"Advanced Analysis initialized with output directory: {self.output_directory}")
         log_memory_usage("after initialization")
     
+    def get_map_output_directory(self):
+        """
+        Get the directory for saving maps. Maps should go to Path_Maps subdirectory.
+        Uses either hardcoded path "C:\\AIS_Data\\Output\\Path_Maps" or 
+        output_directory from config + "Path_Maps".
+        
+        Returns:
+            Path object for the map output directory
+        """
+        from pathlib import Path
+        
+        # Try hardcoded path first
+        hardcoded_path = Path("C:\\AIS_Data\\Output\\Path_Maps")
+        hardcoded_parent = Path("C:\\AIS_Data\\Output")
+        
+        # Use hardcoded path if parent directory exists (we can create Path_Maps)
+        if hardcoded_parent.exists():
+            map_dir = hardcoded_path
+        else:
+            # Use output_directory from config + Path_Maps subdirectory
+            map_dir = Path(self.output_directory) / "Path_Maps"
+        
+        # Create directory if it doesn't exist
+        map_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Map output directory: {map_dir}")
+        return map_dir
+    
     def load_cached_data(self, force_reload=False):
         """Load cached data from the last run with enhanced error handling."""
         if self._cached_data is not None and not force_reload:
@@ -977,76 +930,113 @@ class AdvancedAnalysis:
             self._cached_data = pd.DataFrame()
             return self._cached_data
 
-    # def load_cached_data(self, force_reload=False):
-    #     """Load cached data from the last run with enhanced error handling."""
-    #     if self._cached_data is not None and not force_reload:
-    #         return self._cached_data
+    def load_full_daily_datasets(self, start_date=None, end_date=None):
+        """
+        Load full daily datasets from cache directory for ML prediction.
+        This loads the raw daily parquet files, not the filtered/consolidated data.
         
-    #     logger.info("Loading cached data...")
-    #     log_memory_usage("before loading cached data")
+        Args:
+            start_date: Start date string (YYYY-MM-DD). If None, uses run_info start_date.
+            end_date: End date string (YYYY-MM-DD). If None, uses run_info end_date.
+            
+        Returns:
+            DataFrame with all daily data for the date range
+        """
+        logger.info("Loading full daily datasets from cache for ML prediction...")
         
-    #     try:
-    #         # Get information about what we're looking for
-    #         cache_dir = get_cache_dir()
-    #         start_date = self.run_info['start_date']
-    #         end_date = self.run_info['end_date']
-    #         ship_types = self.run_info['ship_types']
+        try:
+            cache_dir = get_cache_dir()
+            if not cache_dir:
+                logger.warning("Failed to get cache directory, using fallback")
+                cache_dir = os.path.expanduser("~/.ais_data_cache")
+                os.makedirs(cache_dir, exist_ok=True)
             
-    #         logger.info(f"Searching for cached data with: date range={start_date} to {end_date}, vessel types={ship_types}")
+            # Get date range from run_info if not provided
+            if start_date is None:
+                start_date = self.run_info.get('start_date', '2024-10-01')
+            if end_date is None:
+                end_date = self.run_info.get('end_date', '2024-10-03')
             
-    #         # Check if date-specific subfolder might exist
-    #         try:
-    #             start_fmt = datetime.strptime(start_date, '%Y-%m-%d').strftime('%Y%m%d')
-    #             end_fmt = datetime.strptime(end_date, '%Y-%m-%d').strftime('%Y%m%d')
-    #             date_subfolder = f"{start_fmt}-{end_fmt}"
-    #             date_cache_dir = os.path.join(cache_dir, date_subfolder)
-                
-    #             if os.path.exists(date_cache_dir):
-    #                 logger.info(f"Date-specific subfolder exists: {date_cache_dir}")
-    #                 logger.info(f"Files in date subfolder: {len(os.listdir(date_cache_dir))}")
-    #             else:
-    #                 logger.info(f"No date-specific subfolder found at: {date_cache_dir}")
-    #         except Exception as e:
-    #             logger.warning(f"Error checking date subfolder: {e}")
+            logger.info(f"Loading full daily datasets for date range: {start_date} to {end_date}")
             
-    #         # Find matching cache files
-    #         cache_files = find_cache_files_for_date_range(
-    #             start_date,
-    #             end_date,
-    #             ship_types,
-    #             cache_dir
-    #         )
+            # Check date-specific subfolder first
+            start_fmt = datetime.strptime(start_date, '%Y-%m-%d').strftime('%Y%m%d')
+            end_fmt = datetime.strptime(end_date, '%Y-%m-%d').strftime('%Y%m%d')
+            date_subfolder = f"{start_fmt}-{end_fmt}"
+            date_cache_dir = os.path.join(cache_dir, date_subfolder)
             
-    #         if not cache_files:
-    #             logger.warning(f"No matching cache files found for date range {self.run_info['start_date']} to {self.run_info['end_date']}")
-    #             logger.info(f"The cache directory is: {cache_dir}")
-    #             logger.info("Please ensure data files exist for the specified date range and ship types")
-    #             self._cached_data = pd.DataFrame()
-    #             return self._cached_data
+            dataframes = []
             
-    #         self._cached_data = load_cached_data_for_date_range(
-    #             self.run_info['start_date'],
-    #             self.run_info['end_date'],
-    #             self.run_info['ship_types']
-    #         )
+            if os.path.exists(date_cache_dir):
+                # Load all parquet files from date subfolder, excluding consolidated_data.parquet
+                logger.info(f"Loading daily datasets from: {date_cache_dir}")
+                for filename in os.listdir(date_cache_dir):
+                    if filename == "consolidated_data.parquet":
+                        continue  # Skip consolidated data
+                    
+                    if filename.endswith('.parquet'):
+                        file_path = os.path.join(date_cache_dir, filename)
+                        try:
+                            df = pd.read_parquet(file_path)
+                            
+                            # Filter by date range if BaseDateTime exists
+                            if 'BaseDateTime' in df.columns:
+                                df['BaseDateTime'] = pd.to_datetime(df['BaseDateTime'], errors='coerce')
+                                start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+                                end_dt = datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1)
+                                df = df[(df['BaseDateTime'] >= start_dt) & (df['BaseDateTime'] < end_dt)]
+                            
+                            if not df.empty:
+                                dataframes.append(df)
+                                logger.info(f"Loaded {len(df)} records from {filename}")
+                        except Exception as e:
+                            logger.warning(f"Error loading {filename}: {e}")
+                            continue
             
-    #         if not self._cached_data.empty:
-    #             self._cached_data = cleanup_large_dataframe(self._cached_data)
-    #             log_memory_usage("after loading cached data")
-    #             logger.info(f"Loaded {len(self._cached_data)} records from {len(cache_files)} files")
-    #         else:
-    #             logger.warning("No cached data loaded despite finding cache files")
-    #             logger.info("The found files may not contain relevant data for the specified parameters")
+            # If no data found in date subfolder, try root cache directory
+            if not dataframes:
+                logger.info(f"No data found in date subfolder, checking root cache directory: {cache_dir}")
+                for filename in os.listdir(cache_dir):
+                    if filename == "consolidated_data.parquet":
+                        continue
+                    
+                    if filename.endswith('.parquet'):
+                        file_path = os.path.join(cache_dir, filename)
+                        try:
+                            df = pd.read_parquet(file_path)
+                            
+                            # Filter by date range if BaseDateTime exists
+                            if 'BaseDateTime' in df.columns:
+                                df['BaseDateTime'] = pd.to_datetime(df['BaseDateTime'], errors='coerce')
+                                start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+                                end_dt = datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1)
+                                df = df[(df['BaseDateTime'] >= start_dt) & (df['BaseDateTime'] < end_dt)]
+                            
+                            if not df.empty:
+                                dataframes.append(df)
+                                logger.info(f"Loaded {len(df)} records from {filename}")
+                        except Exception as e:
+                            logger.warning(f"Error loading {filename}: {e}")
+                            continue
             
-    #         return self._cached_data
+            if not dataframes:
+                logger.warning("No daily datasets found in cache directory")
+                return pd.DataFrame()
             
-    #     except MemoryError:
-    #         logger.error("Insufficient memory to load cached data")
-    #         logger.info("Try processing a smaller date range or enable data filtering")
-    #         raise
-    #     except Exception as e:
-    #         logger.error(f"Error loading cached data: {e}")
-    #         raise
+            # Combine all dataframes
+            combined_df = pd.concat(dataframes, ignore_index=True)
+            
+            # Remove duplicates if any
+            if 'BaseDateTime' in combined_df.columns and 'MMSI' in combined_df.columns:
+                combined_df = combined_df.drop_duplicates(subset=['MMSI', 'BaseDateTime'], keep='first')
+            
+            logger.info(f"Total records loaded from full daily datasets: {len(combined_df)}")
+            return combined_df
+            
+        except Exception as e:
+            logger.error(f"Error loading full daily datasets: {e}")
+            logger.error(traceback.format_exc())
+            return pd.DataFrame()
     
     def load_anomaly_data(self, force_reload=False):
         """Load anomaly summary data."""
@@ -2457,7 +2447,8 @@ class AdvancedAnalysis:
             
             if output_path is None:
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                output_path = os.path.join(self.output_directory, f"Full_Spectrum_Map_{timestamp}.html")
+                map_dir = self.get_map_output_directory()
+                output_path = os.path.join(map_dir, f"Full_Spectrum_Map_{timestamp}.html")
             
             center_lat = anomaly_df['LAT'].mean() if 'LAT' in anomaly_df.columns else 0
             center_lon = anomaly_df['LON'].mean() if 'LON' in anomaly_df.columns else 0
@@ -2503,9 +2494,10 @@ class AdvancedAnalysis:
                 logger.error("folium not available for map creation")
                 return None
             
-            logger.info(f"Creating {map_type} map for vessel {mmsi}...")
+            logger.info(f"Creating {map_type} map for vessel {mmsi} using full daily datasets...")
             
-            df = self.load_cached_data()
+            # Use full daily datasets for vessel-specific analysis
+            df = self.load_full_daily_datasets()
             anomaly_df = self.load_anomaly_data()
             
             if df.empty:
@@ -2540,7 +2532,8 @@ class AdvancedAnalysis:
             
             if output_path is None:
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                output_path = os.path.join(self.output_directory, f"Vessel_{mmsi}_{map_type}_{timestamp}.html")
+                map_dir = self.get_map_output_directory()
+                output_path = os.path.join(map_dir, f"Vessel_{mmsi}_{map_type}_{timestamp}.html")
             
             center_lat = vessel_data['LAT'].mean()
             center_lon = vessel_data['LON'].mean()
@@ -2560,6 +2553,31 @@ class AdvancedAnalysis:
                     logger.info(f"Path map: Added {len(path_coords)} points for vessel {mmsi}")
                 else:
                     logger.warning(f"No valid coordinates found for path map")
+                
+                # Add anomalies to path map
+                if not vessel_anomalies.empty:
+                    marker_count = 0
+                    for _, row in vessel_anomalies.iterrows():
+                        if pd.notna(row.get('LAT')) and pd.notna(row.get('LON')):
+                            popup_text = f"<b>Anomaly Detected</b><br>"
+                            popup_text += f"MMSI: {mmsi}<br>"
+                            popup_text += f"Anomaly Type: {row.get('AnomalyType', 'Unknown')}<br>"
+                            if 'BaseDateTime' in row and pd.notna(row.get('BaseDateTime')):
+                                popup_text += f"Time: {row['BaseDateTime']}<br>"
+                            if 'LAT' in row and pd.notna(row.get('LAT')):
+                                popup_text += f"Latitude: {row['LAT']:.6f}°<br>"
+                            if 'LON' in row and pd.notna(row.get('LON')):
+                                popup_text += f"Longitude: {row['LON']:.6f}°"
+                            
+                            folium.Marker(
+                                [row['LAT'], row['LON']],
+                                popup=folium.Popup(popup_text, max_width=250),
+                                icon=folium.Icon(color='red', icon='exclamation-sign', prefix='fa')
+                            ).add_to(m)
+                            marker_count += 1
+                    logger.info(f"Path map: Added {marker_count} anomaly markers for vessel {mmsi}")
+                else:
+                    logger.info(f"Path map: No anomalies found for vessel {mmsi}")
             
             elif map_type == 'anomaly':
                 if not vessel_anomalies.empty:
@@ -2621,16 +2639,30 @@ class AdvancedAnalysis:
             logger.error(f"Error getting top vessels: {e}")
             return pd.DataFrame()
     
-    def create_filtered_map(self, map_type='path', vessel_types=None, anomaly_types=None, vessel_mmsi=None, output_path=None):
-        """Create filtered maps for specific anomaly types and/or vessel types, or specific vessel + anomaly type."""
+    def create_filtered_map(self, map_type='path', vessel_types=None, anomaly_types=None, vessel_mmsi=None, output_path=None, use_full_datasets=False):
+        """Create filtered maps for specific anomaly types and/or vessel types, or specific vessel + anomaly type.
+        
+        Args:
+            map_type: Type of map ('path', 'anomaly', 'heatmap')
+            vessel_types: List of vessel types to filter
+            anomaly_types: List of anomaly types to filter
+            vessel_mmsi: Specific vessel MMSI to filter
+            output_path: Path to save the map
+            use_full_datasets: If True, use full daily datasets instead of filtered/consolidated data
+        """
         try:
             if not FOLIUM_AVAILABLE:
                 logger.error("folium not available for map creation")
                 return None
             
-            logger.info(f"Creating filtered {map_type} map: vessel_types={vessel_types}, anomaly_types={anomaly_types}, vessel_mmsi={vessel_mmsi}")
+            logger.info(f"Creating filtered {map_type} map: vessel_types={vessel_types}, anomaly_types={anomaly_types}, vessel_mmsi={vessel_mmsi}, use_full_datasets={use_full_datasets}")
             
-            df = self.load_cached_data()
+            # Use full datasets for vessel-specific analysis, filtered data for general analysis
+            if use_full_datasets or vessel_mmsi is not None:
+                logger.info("Using full daily datasets for vessel-specific analysis")
+                df = self.load_full_daily_datasets()
+            else:
+                df = self.load_cached_data()
             anomaly_df = self.load_anomaly_data()
             
             # Filter by vessel MMSI if specified
@@ -2660,10 +2692,11 @@ class AdvancedAnalysis:
             
             if output_path is None:
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                map_dir = self.get_map_output_directory()
                 filter_str = f"filtered_{map_type}_{timestamp}"
                 if vessel_mmsi:
                     filter_str = f"vessel_{vessel_mmsi}_{map_type}_{timestamp}"
-                output_path = os.path.join(self.output_directory, f"{filter_str}.html")
+                output_path = os.path.join(map_dir, f"{filter_str}.html")
             
             center_lat = df['LAT'].mean() if 'LAT' in df.columns else 0
             center_lon = df['LON'].mean() if 'LON' in df.columns else 0
@@ -2678,6 +2711,31 @@ class AdvancedAnalysis:
                     if path_coords:
                         folium.PolyLine(path_coords, color='blue', weight=2, opacity=0.7, 
                                        popup=f"Vessel {mmsi}").add_to(m)
+                
+                # Add anomalies to path map
+                if not anomaly_df.empty:
+                    marker_count = 0
+                    for _, row in anomaly_df.iterrows():
+                        if pd.notna(row.get('LAT')) and pd.notna(row.get('LON')):
+                            popup_text = f"<b>Anomaly Detected</b><br>"
+                            popup_text += f"MMSI: {row.get('MMSI', 'N/A')}<br>"
+                            popup_text += f"Anomaly Type: {row.get('AnomalyType', 'Unknown')}<br>"
+                            if 'BaseDateTime' in row and pd.notna(row.get('BaseDateTime')):
+                                popup_text += f"Time: {row['BaseDateTime']}<br>"
+                            if 'LAT' in row and pd.notna(row.get('LAT')):
+                                popup_text += f"Latitude: {row['LAT']:.6f}°<br>"
+                            if 'LON' in row and pd.notna(row.get('LON')):
+                                popup_text += f"Longitude: {row['LON']:.6f}°"
+                            
+                            folium.Marker(
+                                [row['LAT'], row['LON']],
+                                popup=folium.Popup(popup_text, max_width=250),
+                                icon=folium.Icon(color='red', icon='exclamation-sign', prefix='fa')
+                            ).add_to(m)
+                            marker_count += 1
+                    logger.info(f"Filtered path map: Added {marker_count} anomaly markers")
+                else:
+                    logger.info(f"Filtered path map: No anomalies found")
             
             elif map_type == 'anomaly':
                 if not anomaly_df.empty:
@@ -2727,13 +2785,16 @@ class AdvancedAnalysis:
                 logger.error(f"Invalid date range: {error_msg}")
                 return None
             
-            original_df = self.load_cached_data()
+            # Use full daily datasets for original period (not filtered/consolidated data)
+            logger.info("Loading full daily datasets for original period...")
+            original_df = self.load_full_daily_datasets()
             original_vessel = original_df[original_df['MMSI'] == mmsi] if not original_df.empty else pd.DataFrame()
             
-            extended_df = load_cached_data_for_date_range(
-                additional_days_start,
-                additional_days_end,
-                self.run_info['ship_types']
+            # Use full daily datasets for extended period (not filtered by vessel types)
+            logger.info(f"Loading full daily datasets for extended period: {additional_days_start} to {additional_days_end}...")
+            extended_df = self.load_full_daily_datasets(
+                start_date=additional_days_start,
+                end_date=additional_days_end
             )
             extended_vessel = extended_df[extended_df['MMSI'] == mmsi] if not extended_df.empty else pd.DataFrame()
             
@@ -2758,7 +2819,8 @@ class AdvancedAnalysis:
             
             if output_path is None:
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                output_path = os.path.join(self.output_directory, f"Extended_Analysis_{mmsi}_{timestamp}.html")
+                map_dir = self.get_map_output_directory()
+                output_path = os.path.join(map_dir, f"Extended_Analysis_{mmsi}_{timestamp}.html")
             
             html_content = ["<html><head><title>Extended Time Analysis</title></head><body>"]
             html_content.append(f"<h1>Extended Time Analysis for Vessel {mmsi}</h1>")
@@ -2857,7 +2919,7 @@ class AdvancedAnalysisGUI:
             # Create an error window
             self.window = tk.Toplevel(parent_window)
             self.window.title("Advanced Analysis Error")
-            self.window.geometry("900x700")
+            self.window.geometry("900x800")
             
             # Create a basic frame with error info
             main_frame = ttk.Frame(self.window, padding=10)
@@ -2916,6 +2978,10 @@ class AdvancedAnalysisGUI:
         self.ship_types = {}
         # Initialize ship types by categories
         self._init_ship_types()
+        
+        # Get default date range from analysis run info (with fallback)
+        self.default_start_date = self.analysis.run_info.get('start_date', '2024-10-01')
+        self.default_end_date = self.analysis.run_info.get('end_date', '2024-10-03')
         
         # Create the GUI
         self.window = tk.Toplevel(parent_window)
@@ -3788,42 +3854,6 @@ class AdvancedAnalysisGUI:
         button_frame.pack(fill=tk.X, padx=10, pady=10)
         ttk.Button(button_frame, text="Close", command=coord_dialog.destroy).pack(side=tk.LEFT, padx=5)
     
-    def _delete_selected_zone(self):
-        """Delete the selected zone from the list"""
-        if not self.zone_checkboxes:
-            messagebox.showinfo("Info", "No zones available to delete.")
-            return
-            
-        # Find which zone is currently selected in the UI
-        selected_zones = [name for name, data in self.zone_checkboxes.items() 
-                         if 'selected' in data and data['selected'].get()]
-        
-        if not selected_zones:
-            messagebox.showinfo("Info", "Please select a zone to delete.")
-            return
-            
-        # If multiple zones are selected, ask which one to delete
-        zone_to_delete = selected_zones[0] if len(selected_zones) == 1 else \
-                        simpledialog.askstring("Select Zone", "Which zone do you want to delete?",
-                                              initialvalue=selected_zones[0])
-        
-        if not zone_to_delete or zone_to_delete not in self.zone_checkboxes:
-            return
-            
-        # Confirm deletion
-        if not messagebox.askyesno("Confirm Deletion", f"Are you sure you want to delete the zone '{zone_to_delete}'?"):
-            return
-            
-        # Remove from data structures
-        for i, zone in enumerate(self.zone_violations):
-            if zone['name'] == zone_to_delete:
-                del self.zone_violations[i]
-                break
-                
-        # Refresh the display
-        self._refresh_zone_list()
-        self._save_zones_to_config()
-    
     def reset_analysis_filters_to_defaults(self):
         """Reset analysis filters to default values"""
         self.analysis_filters['min_latitude'].set(-90.0)
@@ -3953,6 +3983,8 @@ class AdvancedAnalysisGUI:
         self.top_vessels_menu = tk.Menu(self.window, tearoff=0)
         self.top_vessels_menu.add_command(label="Copy MMSI", command=self._copy_mmsi_from_listbox)
         self.top_vessels_listbox.bind("<Button-3>", self._show_listbox_menu)
+        # Add double-click handler to populate MMSI fields
+        self.top_vessels_listbox.bind("<Double-Button-1>", self._populate_mmsi_from_listbox)
         self._populate_top_vessels()
         
         frame4 = ttk.Frame(tab)
@@ -3988,21 +4020,34 @@ class AdvancedAnalysisGUI:
         # Use DateEntry if available, otherwise use text entry
         if TKCALENDAR_AVAILABLE:
             ttk.Label(frame1, text="Start:").pack(side=tk.LEFT, padx=2)
+            # Use state='normal' to allow manual input; month/year dropdowns work by default in calendar popup
+            # Parse default start date
+            try:
+                default_start_dt = datetime.strptime(self.default_start_date, '%Y-%m-%d').date()
+            except (ValueError, AttributeError):
+                default_start_dt = datetime(2024, 10, 1).date()
             self.extended_start_picker = DateEntry(frame1, width=12, background='darkblue',
                                                    foreground='white', borderwidth=2, date_pattern='y-mm-dd',
-                                                   state='readonly')
+                                                   state='normal')
+            self.extended_start_picker.set_date(default_start_dt)
             self.extended_start_picker.pack(side=tk.LEFT, padx=2)
             
             ttk.Label(frame1, text="End:").pack(side=tk.LEFT, padx=2)
+            # Parse default end date
+            try:
+                default_end_dt = datetime.strptime(self.default_end_date, '%Y-%m-%d').date()
+            except (ValueError, AttributeError):
+                default_end_dt = datetime(2024, 10, 3).date()
             self.extended_end_picker = DateEntry(frame1, width=12, background='darkblue',
                                                  foreground='white', borderwidth=2, date_pattern='y-mm-dd',
-                                                 state='readonly')
+                                                 state='normal')
+            self.extended_end_picker.set_date(default_end_dt)
             self.extended_end_picker.pack(side=tk.LEFT, padx=2)
             self.extended_start_var = None
             self.extended_end_var = None
         else:
-            self.extended_start_var = tk.StringVar()
-            self.extended_end_var = tk.StringVar()
+            self.extended_start_var = tk.StringVar(value=self.default_start_date)
+            self.extended_end_var = tk.StringVar(value=self.default_end_date)
             ttk.Entry(frame1, textvariable=self.extended_start_var, width=12).pack(side=tk.LEFT, padx=2)
             ttk.Label(frame1, text="to").pack(side=tk.LEFT)
             ttk.Entry(frame1, textvariable=self.extended_end_var, width=12).pack(side=tk.LEFT, padx=2)
@@ -4021,11 +4066,6 @@ class AdvancedAnalysisGUI:
             ttk.Button(frame2, text="AI Predicted Path (ML Module Not Available)", width=50,
                       command=lambda: messagebox.showwarning("Not Available", 
                       "ML Course Prediction module is not available. Please ensure PyTorch and ml_course_prediction module are installed.")).pack(side=tk.LEFT, padx=5)
-                              # frame2 = ttk.Frame(tab)
-        # frame2.pack(fill=tk.X, pady=5)
-        # ttk.Button(frame2, text="AI Predicted Path (Coming Soon)", width=30,
-        #           command=lambda: messagebox.showinfo("Coming Soon", 
-        #           "AI path prediction feature will be available in a future release.")).pack(side=tk.LEFT, padx=5)
     
     def _export_full_dataset(self):
         progress = ProgressDialog(self.window, "Exporting Dataset", "Exporting full dataset to CSV...")
@@ -4774,6 +4814,35 @@ class AdvancedAnalysisGUI:
             logger.error(f"Error copying MMSI: {e}")
             messagebox.showerror("Error", f"Failed to copy MMSI: {e}")
     
+    def _populate_mmsi_from_listbox(self, event=None):
+        """Populate MMSI input fields from double-clicked listbox item"""
+        try:
+            selection = self.top_vessels_listbox.curselection()
+            if selection:
+                item_text = self.top_vessels_listbox.get(selection[0])
+                # Skip category headers (lines ending with ":")
+                if item_text.strip().endswith(':'):
+                    return
+                # Extract MMSI from text like "  MMSI 123456789: 5 anomalies"
+                match = re.search(r'MMSI\s+(\d+)', item_text)
+                if match:
+                    mmsi = match.group(1)
+                    # Populate MMSI field on Mapping Tools tab
+                    if hasattr(self, 'vessel_mmsi_var'):
+                        self.vessel_mmsi_var.set(mmsi)
+                    # Populate MMSI field on Vessel-Specific Analysis tab
+                    if hasattr(self, 'extended_mmsi_var'):
+                        self.extended_mmsi_var.set(mmsi)
+                    self.status_var.set(f"Populated MMSI {mmsi} in input fields")
+                else:
+                    # Silently ignore if it's not an MMSI entry (e.g., category header)
+                    pass
+            else:
+                messagebox.showwarning("Warning", "Please select a vessel from the list")
+        except Exception as e:
+            logger.error(f"Error populating MMSI: {e}")
+            messagebox.showerror("Error", f"Failed to populate MMSI: {e}")
+    
     def _create_filtered_map_dialog(self):
         """Create dialog for filtered map creation"""
         dialog = tk.Toplevel(self.window)
@@ -4886,6 +4955,262 @@ class AdvancedAnalysisGUI:
             messagebox.showerror("Error", f"Error creating filtered map dialog: {e}")
             dialog.destroy()
     
+    def draw_geographic_box(self):
+        """Draw a geographic box on a map and update lat/long bounds"""
+        self._draw_box_for_bounds(
+            self.window,
+            self.analysis_filters['min_latitude'],
+            self.analysis_filters['max_latitude'],
+            self.analysis_filters['min_longitude'],
+            self.analysis_filters['max_longitude']
+        )
+    
+    def _draw_box_for_bounds(self, parent_window, min_lat_var, max_lat_var, min_lon_var, max_lon_var):
+        """Draw a box on a map and populate lat/long bound fields"""
+        try:
+            import folium
+            from folium.plugins import Draw
+            import webbrowser
+            import tempfile
+        except ImportError as e:
+            messagebox.showerror("Error", f"Required library not found: {e}\n\nPlease install folium: pip install folium")
+            return
+        
+        # Create a map centered on a default location (middle of world)
+        m = folium.Map(location=[20, 0], zoom_start=2)
+        
+        # Add drawing tools
+        draw = Draw(
+            export=True,
+            filename='bounds_draw_data.geojson',
+            position='topleft',
+            draw_options={
+                'polyline': False,
+                'polygon': False,
+                'rectangle': True,  # Enable rectangle drawing
+                'circle': False,
+                'marker': False,
+                'circlemarker': False
+            },
+            edit_options={'edit': True, 'remove': True}
+        )
+        draw.add_to(m)
+        
+        # Add instructions and coordinate display to the map
+        instructions_html = """
+        <div style="position: fixed; 
+                    top: 10px; right: 10px; width: 300px; height: 180px; 
+                    background-color: white; z-index:9999; 
+                    border: 2px solid grey; padding: 10px; border-radius: 5px;">
+            <h4 style="margin-top:0;">Draw Geographic Box Instructions</h4>
+            <ol style="margin: 0; padding-left: 20px; font-size: 12px;">
+                <li>Click the rectangle tool in the toolbar (top-left)</li>
+                <li>Click and drag on the map to draw a rectangle</li>
+                <li>Coordinates will appear in the bottom-left box</li>
+                <li>Click "Copy Coordinates" to copy them</li>
+                <li>Return to the application and paste/enter them</li>
+            </ol>
+        </div>
+        <div id="coords-display" style="position: fixed; bottom: 10px; left: 10px; width: 400px; 
+            background-color: white; z-index:9999; border: 2px solid #007bff; 
+            padding: 15px; border-radius: 5px; font-family: Arial, sans-serif; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);">
+            <h4 style="margin-top:0;">Geographic Box Coordinates</h4>
+            <p id="coords-text" style="font-size: 12px; color: #666;">Draw a rectangle on the map...</p>
+            <button id="copy-coords" style="margin-top: 10px; padding: 5px 10px; 
+                background-color: #007bff; color: white; border: none; border-radius: 3px; 
+                cursor: pointer;">Copy Coordinates</button>
+        </div>
+        """
+        m.get_root().html.add_child(folium.Element(instructions_html))
+        
+        # Add JavaScript to extract coordinates from drawn rectangles
+        extract_coords_js = folium.Element("""
+        <script>
+        // Wait for map and draw plugin to be initialized
+        setTimeout(function() {
+            // Find the map object (folium stores it in the window)
+            var mapObj = null;
+            for (var key in window) {
+                if (window[key] && window[key].hasOwnProperty && window[key].hasOwnProperty('_container')) {
+                    mapObj = window[key];
+                    break;
+                }
+            }
+            
+            // Alternative: try to get from Leaflet's global map registry
+            if (!mapObj && typeof L !== 'undefined') {
+                L.eachLayer = L.eachLayer || function(callback) {
+                    for (var id in this._layers) {
+                        callback(this._layers[id]);
+                    }
+                };
+                // Get the first map instance
+                for (var id in L._layers) {
+                    var layer = L._layers[id];
+                    if (layer instanceof L.Map) {
+                        mapObj = layer;
+                        break;
+                    }
+                }
+            }
+            
+            if (mapObj) {
+                // Listen for draw events
+                mapObj.on('draw:created', function(e) {
+                    var layer = e.layer;
+                    var bounds = layer.getBounds();
+                    var sw = bounds.getSouthWest();
+                    var ne = bounds.getNorthEast();
+                    
+                    var coords = {
+                        lat_min: sw.lat.toFixed(6),
+                        lat_max: ne.lat.toFixed(6),
+                        lon_min: sw.lng.toFixed(6),
+                        lon_max: ne.lng.toFixed(6)
+                    };
+                    
+                    var coordsText = 'Lat Min: ' + coords.lat_min + '<br>' +
+                                   'Lat Max: ' + coords.lat_max + '<br>' +
+                                   'Lon Min: ' + coords.lon_min + '<br>' +
+                                   'Lon Max: ' + coords.lon_max;
+                    
+                    var coordsTextEl = document.getElementById('coords-text');
+                    if (coordsTextEl) {
+                        coordsTextEl.innerHTML = coordsText;
+                    }
+                    
+                    // Store coordinates in a global variable for copying
+                    window.boxCoords = coords;
+                });
+            }
+            
+            // Copy button functionality
+            var copyBtn = document.getElementById('copy-coords');
+            if (copyBtn) {
+                copyBtn.addEventListener('click', function() {
+                    if (window.boxCoords) {
+                        var text = window.boxCoords.lat_min + ',' + window.boxCoords.lat_max + ',' +
+                                  window.boxCoords.lon_min + ',' + window.boxCoords.lon_max;
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                            navigator.clipboard.writeText(text).then(function() {
+                                alert('Coordinates copied to clipboard!');
+                                // Close the browser window/tab after user clicks OK
+                                window.close();
+                            }).catch(function() {
+                                // Fallback for browsers without clipboard API
+                                var textarea = document.createElement('textarea');
+                                textarea.value = text;
+                                document.body.appendChild(textarea);
+                                textarea.select();
+                                document.execCommand('copy');
+                                document.body.removeChild(textarea);
+                                alert('Coordinates copied to clipboard!');
+                                // Close the browser window/tab after user clicks OK
+                                window.close();
+                            });
+                        } else {
+                            // Fallback for older browsers
+                            var textarea = document.createElement('textarea');
+                            textarea.value = text;
+                            document.body.appendChild(textarea);
+                            textarea.select();
+                            document.execCommand('copy');
+                            document.body.removeChild(textarea);
+                            alert('Coordinates copied to clipboard!');
+                            // Close the browser window/tab after user clicks OK
+                            window.close();
+                        }
+                    }
+                });
+            }
+        }, 2000);
+        </script>
+        """)
+        m.get_root().html.add_child(extract_coords_js)
+        
+        # Save map to temporary file
+        temp_dir = tempfile.gettempdir()
+        temp_map_file = os.path.join(temp_dir, 'bounds_draw_map.html')
+        m.save(temp_map_file)
+        
+        # Open map in browser
+        webbrowser.open(f'file://{temp_map_file}')
+        
+        # Show dialog to get coordinates
+        coord_dialog = tk.Toplevel(parent_window)
+        coord_dialog.title("Enter Geographic Box Coordinates from Map")
+        coord_dialog.geometry("500x300")
+        coord_dialog.transient(parent_window)
+        coord_dialog.grab_set()
+        
+        # Instructions
+        instructions = tk.Text(coord_dialog, height=6, wrap=tk.WORD, font=("Arial", 9))
+        instructions.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        instructions.insert('1.0', 
+            "Instructions:\n\n"
+            "1. A map has been opened in your browser\n"
+            "2. Use the rectangle tool in the map toolbar (top-left) to draw a geographic box\n"
+            "3. After drawing, coordinates will appear in the bottom-left box on the map\n"
+            "4. Click 'Copy Coordinates' button on the map to copy them\n"
+            "5. Paste the coordinates below (comma-separated: lat_min,lat_max,lon_min,lon_max)\n"
+            "   Or manually enter the coordinates in the fields below"
+        )
+        instructions.config(state=tk.DISABLED)
+        
+        # Paste coordinates frame
+        paste_frame = ttk.LabelFrame(coord_dialog, text="Paste Coordinates (comma-separated)")
+        paste_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        paste_var = tk.StringVar()
+        paste_entry = ttk.Entry(paste_frame, textvariable=paste_var, width=50)
+        paste_entry.pack(side=tk.LEFT, padx=5, pady=5)
+        
+        # Enable right-click context menu for paste entry
+        def create_context_menu(event):
+            """Create right-click context menu for the entry field"""
+            context_menu = tk.Menu(coord_dialog, tearoff=0)
+            context_menu.add_command(label="Cut", command=lambda: paste_entry.event_generate("<<Cut>>"))
+            context_menu.add_command(label="Copy", command=lambda: paste_entry.event_generate("<<Copy>>"))
+            context_menu.add_command(label="Paste", command=lambda: paste_entry.event_generate("<<Paste>>"))
+            context_menu.add_separator()
+            context_menu.add_command(label="Select All", command=lambda: paste_entry.select_range(0, tk.END))
+            try:
+                context_menu.tk_popup(event.x_root, event.y_root)
+            finally:
+                context_menu.grab_release()
+        
+        paste_entry.bind("<Button-3>", create_context_menu)  # Right-click on Windows/Linux
+        paste_entry.bind("<Button-2>", create_context_menu)  # Right-click on macOS
+        paste_entry.bind("<Control-Button-1>", create_context_menu)  # Control+Click on macOS
+        
+        def parse_pasted_coords():
+            """Parse pasted coordinates and fill in the fields"""
+            paste_text = paste_var.get().strip()
+            if not paste_text:
+                return
+            
+            try:
+                coords = [float(x.strip()) for x in paste_text.split(',')]
+                if len(coords) == 4:
+                    min_lat_var.set(coords[0])
+                    max_lat_var.set(coords[1])
+                    min_lon_var.set(coords[2])
+                    max_lon_var.set(coords[3])
+                    messagebox.showinfo("Success", "Coordinates parsed and filled in!")
+                    coord_dialog.destroy()
+                else:
+                    messagebox.showerror("Error", "Please enter 4 comma-separated values: lat_min,lat_max,lon_min,lon_max")
+            except ValueError:
+                messagebox.showerror("Error", "Invalid format. Please enter: lat_min,lat_max,lon_min,lon_max")
+        
+        ttk.Button(paste_frame, text="Parse & Fill", command=parse_pasted_coords).pack(side=tk.LEFT, padx=5, pady=5)
+        
+        # Buttons
+        button_frame = ttk.Frame(coord_dialog)
+        button_frame.pack(fill=tk.X, padx=10, pady=10)
+        ttk.Button(button_frame, text="Close", command=coord_dialog.destroy).pack(side=tk.LEFT, padx=5)
+    
     def _extended_time_analysis(self):
         mmsi_str = self.extended_mmsi_var.get()
         
@@ -4946,13 +5271,18 @@ class AdvancedAnalysisGUI:
         progress = ProgressDialog(self.window, "ML Course Prediction", 
                                  f"Predicting course for vessel {mmsi}...")
         try:
-            self.status_var.set(f"Loading data for vessel {mmsi}...")
+            self.status_var.set(f"Loading full daily datasets for vessel {mmsi}...")
             
-            # Load cached data
-            df = self.analysis.load_cached_data()
+            # Load full daily datasets from cache (not filtered/consolidated data)
+            df = self.analysis.load_full_daily_datasets()
             if df.empty:
                 progress.close()
-                messagebox.showerror("Error", "No cached data available. Please run an analysis first.")
+                messagebox.showerror("Error", 
+                    "No daily datasets found in cache directory.\n\n"
+                    "Please ensure that:\n"
+                    "1. AIS data has been downloaded and cached\n"
+                    "2. Cache directory contains parquet files for the date range\n"
+                    "3. Files are in the correct date subfolder (YYYYMMDD-YYYYMMDD)")
                 return
             
             self.status_var.set(f"Initializing ML prediction...")
@@ -4995,76 +5325,1022 @@ class AdvancedAnalysisGUI:
         position_mean = predictions['position_mean']
         position_lower = predictions['position_lower']
         position_upper = predictions['position_upper']
+        # position_std is optional but used for uncertainty display
+        position_std = predictions.get('position_std', None)
+        
+        # Log initial shapes for debugging
+        logger.info(f"Initial position_mean type: {type(position_mean)}, shape: {getattr(position_mean, 'shape', 'N/A')}")
+        logger.info(f"Expected shape: (8, 2) for 48 hours at 6-hour intervals")
+        
+        # Ensure position arrays are 2D (time_steps, 2)
+        # Convert to numpy if needed and handle different shapes
+        if not isinstance(position_mean, np.ndarray):
+            position_mean = np.array(position_mean)
+        if not isinstance(position_lower, np.ndarray):
+            position_lower = np.array(position_lower)
+        if not isinstance(position_upper, np.ndarray):
+            position_upper = np.array(position_upper)
+        
+        # Always generate list of predicted coordinates (for logging and display)
+        predicted_coords = []
+        try:
+            if position_mean.ndim == 2 and position_mean.shape[1] == 2:
+                for i in range(position_mean.shape[0]):
+                    lat = float(position_mean[i, 0])
+                    lon = float(position_mean[i, 1])
+                    # Check for valid coordinates
+                    if not (np.isnan(lat) or np.isnan(lon) or np.isinf(lat) or np.isinf(lon)):
+                        hours_ahead = (i + 1) * 6  # Assuming 6-hour intervals
+                        predicted_coords.append({
+                            'hours_ahead': hours_ahead,
+                            'lat': lat,
+                            'lon': lon
+                        })
+            logger.info(f"Generated {len(predicted_coords)} predicted coordinates for vessel {mmsi}")
+        except Exception as e:
+            logger.error(f"Error generating predicted coordinates list: {e}")
+            predicted_coords = []
+        
+        # Handle shape issues - be very explicit
+        logger.debug(f"After conversion - position_mean shape: {position_mean.shape}, ndim: {position_mean.ndim}")
+        
+        if position_mean.ndim == 0:
+            # Scalar - this shouldn't happen but handle it
+            raise ValueError(f"position_mean is a scalar (value: {position_mean}), expected 2D array")
+        elif position_mean.ndim == 1:
+            # Single prediction point (2,) -> reshape to (1, 2)
+            if position_mean.shape[0] == 2:
+                position_mean = position_mean.reshape(1, 2)
+                if position_lower.ndim == 1 and position_lower.shape[0] == 2:
+                    position_lower = position_lower.reshape(1, 2)
+                if position_upper.ndim == 1 and position_upper.shape[0] == 2:
+                    position_upper = position_upper.reshape(1, 2)
+            else:
+                raise ValueError(f"Unexpected 1D position_mean shape: {position_mean.shape}, expected (2,)")
+        elif position_mean.ndim == 2:
+            # Already 2D - verify second dimension is 2
+            if position_mean.shape[1] != 2:
+                raise ValueError(f"position_mean has 2D shape but second dim is {position_mean.shape[1]}, expected 2")
+        else:
+            # 3D or higher - try to squeeze or reshape
+            logger.warning(f"position_mean has {position_mean.ndim} dimensions, shape: {position_mean.shape}, attempting to fix")
+            if position_mean.ndim == 3:
+                # (batch, time_steps, 2) -> (time_steps, 2)
+                if position_mean.shape[0] == 1:
+                    position_mean = position_mean[0]
+                    position_lower = position_lower[0] if position_lower.ndim == 3 else position_lower
+                    position_upper = position_upper[0] if position_upper.ndim == 3 else position_upper
+                else:
+                    raise ValueError(f"position_mean has 3D shape with batch size > 1: {position_mean.shape}")
+            else:
+                raise ValueError(f"position_mean has unexpected number of dimensions: {position_mean.ndim}, shape: {position_mean.shape}")
+        
+        # Final verification - must be 2D with shape (time_steps, 2)
+        if position_mean.ndim != 2:
+            raise ValueError(f"After processing, position_mean still has {position_mean.ndim} dimensions, shape: {position_mean.shape}")
+        if position_mean.shape[1] != 2:
+            raise ValueError(f"After processing, position_mean second dimension is {position_mean.shape[1]}, expected 2. Shape: {position_mean.shape}")
+        
+        logger.debug(f"Final position_mean shape: {position_mean.shape}")
         
         if not FOLIUM_AVAILABLE:
-            # Fallback to text display
+            # Fallback to text display - use the predicted_coords list we already generated
             result_text = f"Prediction Results for Vessel {mmsi}\n\n"
             result_text += f"Last Known Position: ({last_lat:.4f}, {last_lon:.4f})\n"
             if last_time:
                 result_text += f"Last Known Time: {last_time}\n"
             result_text += f"\nPredicted Positions (48 hours ahead):\n"
-            for i, (lat, lon) in enumerate(position_mean):
-                hours_ahead = (i + 1) * 6  # Assuming 6-hour intervals
-                result_text += f"  +{hours_ahead}h: ({lat:.4f}, {lon:.4f})\n"
+            if predicted_coords:
+                for coord in predicted_coords:
+                    result_text += f"  +{coord['hours_ahead']}h: ({coord['lat']:.4f}, {coord['lon']:.4f})\n"
+            else:
+                result_text += "  No valid predicted coordinates generated\n"
             messagebox.showinfo("Prediction Results", result_text)
             return
         
         try:
-            # Create map centered on last known position
-            m = folium.Map(location=[last_lat, last_lon], zoom_start=10)
+            # Collect all points for bounds calculation
+            all_lats = [last_lat]
+            all_lons = [last_lon]
+            
+            # Add historical trajectory points
+            traj_points = []
+            for lat, lon in zip(trajectory['LAT'].values, trajectory['LON'].values):
+                if not (np.isnan(lat) or np.isnan(lon) or np.isinf(lat) or np.isinf(lon)):
+                    traj_points.append([lat, lon])
+                    all_lats.append(lat)
+                    all_lons.append(lon)
+            
+            # Prepare predicted points (filter invalid coordinates)
+            pred_points = []
+            if position_mean.ndim == 2 and position_mean.shape[1] == 2:
+                for i in range(position_mean.shape[0]):
+                    lat = float(position_mean[i, 0])
+                    lon = float(position_mean[i, 1])
+                    # Only add valid coordinates
+                    if not (np.isnan(lat) or np.isnan(lon) or np.isinf(lat) or np.isinf(lon)):
+                        pred_points.append([lat, lon])
+                        all_lats.append(lat)
+                        all_lons.append(lon)
+            
+            logger.info(f"Historical trajectory points: {len(traj_points)}, Predicted points: {len(pred_points)}")
+            
+            # Calculate map center and bounds to include both historical and predicted paths
+            if all_lats and all_lons:
+                center_lat = np.mean(all_lats)
+                center_lon = np.mean(all_lons)
+                # Add padding to bounds
+                lat_range = max(all_lats) - min(all_lats)
+                lon_range = max(all_lons) - min(all_lons)
+                padding = max(lat_range, lon_range) * 0.2  # 20% padding
+                bounds = [
+                    [min(all_lats) - padding, min(all_lons) - padding],
+                    [max(all_lats) + padding, max(all_lons) + padding]
+                ]
+            else:
+                center_lat = last_lat
+                center_lon = last_lon
+                bounds = None
+            
+            # Create map centered on combined data
+            m = folium.Map(location=[center_lat, center_lon], zoom_start=10)
+            
+            # Fit bounds if we have valid bounds
+            if bounds:
+                m.fit_bounds(bounds)
             
             # Add historical trajectory
-            traj_points = list(zip(trajectory['LAT'].values, trajectory['LON'].values))
-            folium.PolyLine(traj_points, color='blue', weight=3, opacity=0.7,
-                          popup=f"Historical Path - Vessel {mmsi}").add_to(m)
+            if traj_points:
+                folium.PolyLine(traj_points, color='blue', weight=3, opacity=0.7,
+                              popup=f"Historical Path - Vessel {mmsi}").add_to(m)
             
-            # Add last known position marker
-            popup_text = f"Last Known Position<br>Vessel: {mmsi}"
+            # Get first position from trajectory
+            first_lat = None
+            first_lon = None
+            first_time = None
+            if not trajectory.empty:
+                first_lat = float(trajectory['LAT'].iloc[0])
+                first_lon = float(trajectory['LON'].iloc[0])
+                if 'BaseDateTime' in trajectory.columns:
+                    first_time = trajectory['BaseDateTime'].iloc[0]
+            
+            # Add first position marker (green)
+            if first_lat is not None and first_lon is not None:
+                first_popup_text = f"<b>First Position</b><br>"
+                first_popup_text += f"MMSI: {mmsi}<br>"
+                if 'VesselName' in trajectory.columns and pd.notna(trajectory['VesselName'].iloc[0]):
+                    first_popup_text += f"Vessel: {trajectory['VesselName'].iloc[0]}<br>"
+                if 'COG' in trajectory.columns and pd.notna(trajectory['COG'].iloc[0]):
+                    first_popup_text += f"COG: {float(trajectory['COG'].iloc[0]):.1f}°<br>"
+                if 'Heading' in trajectory.columns and pd.notna(trajectory['Heading'].iloc[0]):
+                    first_popup_text += f"Heading: {float(trajectory['Heading'].iloc[0]):.1f}°<br>"
+                if 'SOG' in trajectory.columns and pd.notna(trajectory['SOG'].iloc[0]):
+                    first_popup_text += f"Speed (SOG): {float(trajectory['SOG'].iloc[0]):.2f} knots<br>"
+                if first_time:
+                    first_popup_text += f"Date/Time: {first_time}"
+                
+                folium.Marker(
+                    [first_lat, first_lon],
+                    popup=folium.Popup(first_popup_text, max_width=300),
+                    tooltip=folium.Tooltip(first_popup_text, sticky=False),
+                    icon=folium.Icon(color='green', icon='info-sign')
+                ).add_to(m)
+            
+            # Add blue markers for each known position between start and finish
+            if not trajectory.empty and len(trajectory) > 2:
+                # Iterate through all trajectory points (excluding first and last)
+                for idx in range(1, len(trajectory) - 1):
+                    row = trajectory.iloc[idx]
+                    lat = float(row['LAT'])
+                    lon = float(row['LON'])
+                    
+                    # Skip invalid coordinates
+                    if np.isnan(lat) or np.isnan(lon) or np.isinf(lat) or np.isinf(lon):
+                        continue
+                    
+                    # Build tooltip/popup text
+                    tooltip_text = f"<b>Position Report</b><br>"
+                    tooltip_text += f"MMSI: {mmsi}<br>"
+                    if 'VesselName' in row and pd.notna(row.get('VesselName')):
+                        tooltip_text += f"Vessel: {row['VesselName']}<br>"
+                    if 'COG' in row and pd.notna(row.get('COG')):
+                        tooltip_text += f"COG: {float(row['COG']):.1f}°<br>"
+                    if 'Heading' in row and pd.notna(row.get('Heading')):
+                        tooltip_text += f"Heading: {float(row['Heading']):.1f}°<br>"
+                    if 'SOG' in row and pd.notna(row.get('SOG')):
+                        tooltip_text += f"Speed (SOG): {float(row['SOG']):.2f} knots<br>"
+                    if 'BaseDateTime' in row and pd.notna(row.get('BaseDateTime')):
+                        tooltip_text += f"Date/Time: {row['BaseDateTime']}"
+                    
+                    folium.CircleMarker(
+                        [lat, lon],
+                        radius=4,
+                        popup=folium.Popup(tooltip_text, max_width=300),
+                        tooltip=folium.Tooltip(tooltip_text, sticky=False),
+                        color='blue',
+                        fill=True,
+                        fillColor='blue',
+                        fillOpacity=0.7
+                    ).add_to(m)
+            
+            # Add last known position marker (red)
+            last_popup_text = f"<b>Last Known Position</b><br>"
+            last_popup_text += f"MMSI: {mmsi}<br>"
+            if not trajectory.empty:
+                last_row = trajectory.iloc[-1]
+                if 'VesselName' in last_row and pd.notna(last_row.get('VesselName')):
+                    last_popup_text += f"Vessel: {last_row['VesselName']}<br>"
+                if 'COG' in last_row and pd.notna(last_row.get('COG')):
+                    last_popup_text += f"COG: {float(last_row['COG']):.1f}°<br>"
+                if 'Heading' in last_row and pd.notna(last_row.get('Heading')):
+                    last_popup_text += f"Heading: {float(last_row['Heading']):.1f}°<br>"
+                if 'SOG' in last_row and pd.notna(last_row.get('SOG')):
+                    last_popup_text += f"Speed (SOG): {float(last_row['SOG']):.2f} knots<br>"
             if last_time:
-                popup_text += f"<br>Time: {last_time}"
+                last_popup_text += f"Date/Time: {last_time}"
+            
             folium.Marker(
                 [last_lat, last_lon],
-                popup=popup_text,
+                popup=folium.Popup(last_popup_text, max_width=300),
+                tooltip=folium.Tooltip(last_popup_text, sticky=False),
                 icon=folium.Icon(color='red', icon='info-sign')
             ).add_to(m)
             
             # Add predicted path with uncertainty
-            pred_points = [(lat, lon) for lat, lon in position_mean]
-            folium.PolyLine(pred_points, color='green', weight=3, opacity=0.8,
-                          popup="Predicted Path (48 hours)").add_to(m)
-            
-            # Add uncertainty bounds
-            lower_points = [(lat, lon) for lat, lon in position_lower]
-            upper_points = [(lat, lon) for lat, lon in position_upper]
-            folium.PolyLine(lower_points, color='orange', weight=2, opacity=0.5,
-                          dashArray='5, 5', popup="Lower 68% Confidence").add_to(m)
-            folium.PolyLine(upper_points, color='orange', weight=2, opacity=0.5,
-                          dashArray='5, 5', popup="Upper 68% Confidence").add_to(m)
-            
-            # Add predicted position markers
-            for i, (lat, lon) in enumerate(position_mean):
-                hours_ahead = (i + 1) * 6  # Assuming 6-hour intervals
-                std_text = f"±{predictions['position_std'][i].mean():.3f}°"
-                folium.CircleMarker(
-                    [lat, lon],
-                    radius=5,
-                    popup=f"Predicted Position<br>+{hours_ahead} hours<br>Uncertainty: {std_text}",
-                    color='green',
-                    fill=True
-                ).add_to(m)
-            
-            # Save map
+            # Use explicit indexing to avoid unpacking errors
             try:
-                output_dir = Path(self.analysis.config.get('DEFAULT', 'output_directory', 
-                                                          fallback=os.getcwd()))
-            except:
-                output_dir = Path(os.getcwd())
+                if position_mean.ndim == 2 and position_mean.shape[1] == 2:
+                    # Add predicted path (already filtered for valid coordinates)
+                    # Connect predicted path to last known position for continuity
+                    if pred_points:
+                        # Start from last known position
+                        connected_pred_points = [[last_lat, last_lon]] + pred_points
+                        folium.PolyLine(connected_pred_points, color='green', weight=3, opacity=0.8,
+                                      popup="Predicted Path (48 hours)",
+                                      tooltip="Predicted Path (48 hours)").add_to(m)
+                        logger.info(f"Added predicted path with {len(connected_pred_points)} points (including start)")
+                    else:
+                        logger.warning("No valid predicted points to display")
+                    
+                    # Calculate perpendicular confidence intervals (cone shape)
+                    # Uncertainty should be perpendicular to the predicted course (heading), forming an expanding cone
+                    # Uses predicted course and speed from the model if available
+                    def calculate_bearing(lat1, lon1, lat2, lon2):
+                        """Calculate bearing (azimuth) from point 1 to point 2 in degrees"""
+                        lat1_rad = math.radians(lat1)
+                        lat2_rad = math.radians(lat2)
+                        dlon_rad = math.radians(lon2 - lon1)
+                        
+                        y = math.sin(dlon_rad) * math.cos(lat2_rad)
+                        x = math.cos(lat1_rad) * math.sin(lat2_rad) - \
+                            math.sin(lat1_rad) * math.cos(lat2_rad) * math.cos(dlon_rad)
+                        
+                        bearing = math.degrees(math.atan2(y, x))
+                        return (bearing + 360) % 360  # Normalize to 0-360
+                    
+                    def offset_point_by_bearing(lat, lon, bearing_deg, distance_nm):
+                        """Offset a point in a given bearing direction by a distance in nautical miles"""
+                        # Convert distance to degrees
+                        # 1 degree latitude ≈ 60 nautical miles
+                        # 1 degree longitude ≈ 60 * cos(latitude) nautical miles
+                        lat_offset = (distance_nm / 60.0) * math.cos(math.radians(bearing_deg))
+                        lon_offset = (distance_nm / (60.0 * math.cos(math.radians(lat)))) * math.sin(math.radians(bearing_deg))
+                        return lat + lat_offset, lon + lon_offset
+                    
+                    def haversine_distance_meters(lat1, lon1, lat2, lon2):
+                        """Calculate the great-circle distance between two points in meters using Haversine formula"""
+                        # Earth radius in meters
+                        R = 6371000.0  # meters
+                        
+                        # Convert to radians
+                        lat1_rad = math.radians(lat1)
+                        lat2_rad = math.radians(lat2)
+                        dlat_rad = math.radians(lat2 - lat1)
+                        dlon_rad = math.radians(lon2 - lon1)
+                        
+                        # Haversine formula
+                        a = math.sin(dlat_rad / 2)**2 + \
+                            math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon_rad / 2)**2
+                        c = 2 * math.asin(math.sqrt(a))
+                        
+                        distance_meters = R * c
+                        return distance_meters
+                    
+                    # Get predicted course and speed arrays if available
+                    pred_courses = None
+                    pred_speeds = None
+                    if 'course' in predictions and isinstance(predictions['course'], np.ndarray):
+                        pred_courses = predictions['course']
+                    if 'speed' in predictions and isinstance(predictions['speed'], np.ndarray):
+                        pred_speeds = predictions['speed']
+                    
+                    # Calculate perpendicular confidence intervals
+                    if position_mean.ndim == 2 and position_mean.shape[1] == 2 and position_std is not None:
+                        lower_points = []
+                        upper_points = []
+                        
+                        # Start from last known position
+                        lower_points.append([last_lat, last_lon])
+                        upper_points.append([last_lat, last_lon])
+                        
+                        # Build predicted path points
+                        path_points = [[last_lat, last_lon]]
+                        for i in range(position_mean.shape[0]):
+                            lat = float(position_mean[i, 0])
+                            lon = float(position_mean[i, 1])
+                            if not (np.isnan(lat) or np.isnan(lon) or np.isinf(lat) or np.isinf(lon)):
+                                path_points.append([lat, lon])
+                        
+                        # Get last known COG (Course Over Ground) for first prediction if needed
+                        # Always prioritize COG over Heading - COG represents actual movement direction
+                        last_known_cog = None
+                        if not trajectory.empty:
+                            last_row = trajectory.iloc[-1]
+                            if 'COG' in last_row and pd.notna(last_row.get('COG')):
+                                last_known_cog = float(last_row['COG'])
+                            # Only use Heading as fallback if COG is not available
+                            elif 'Heading' in last_row and pd.notna(last_row.get('Heading')):
+                                last_known_cog = float(last_row['Heading'])
+                        
+                        # Calculate confidence intervals using angular offset from predicted course (COG)
+                        for i in range(len(path_points) - 1):
+                            # Current point on predicted path
+                            curr_lat, curr_lon = path_points[i + 1]
+                            
+                            # Determine predicted course (COG - Course Over Ground) for this point
+                            # The model predicts COG, not Heading, as COG represents actual movement direction
+                            predicted_course = None
+                            
+                            # Priority 1: Use predicted COG from model if available
+                            # Note: The model predicts COG (Course Over Ground), not Heading
+                            if pred_courses is not None:
+                                if pred_courses.ndim == 1 and i < len(pred_courses):
+                                    predicted_course = float(pred_courses[i])
+                                elif pred_courses.ndim == 0:
+                                    predicted_course = float(pred_courses)
+                            
+                            # Priority 2: Calculate COG from position (bearing from previous point)
+                            # Bearing between points represents the actual COG (course over ground)
+                            if predicted_course is None:
+                                if i == 0:
+                                    # From last known position to first predicted point
+                                    # Use last known COG if available, otherwise calculate bearing (which is COG)
+                                    if last_known_cog is not None:
+                                        predicted_course = last_known_cog
+                                    else:
+                                        predicted_course = calculate_bearing(path_points[i][0], path_points[i][1], 
+                                                                           curr_lat, curr_lon)
+                                else:
+                                    # From previous predicted point to current predicted point
+                                    # Bearing represents the COG (actual movement direction)
+                                    predicted_course = calculate_bearing(path_points[i][0], path_points[i][1], 
+                                                                       curr_lat, curr_lon)
+                            
+                            # Priority 3: Fallback to last known COG (not Heading)
+                            if predicted_course is None and last_known_cog is not None:
+                                predicted_course = last_known_cog
+                            
+                            # Get predicted speed for distance calculation
+                            predicted_speed = None
+                            if pred_speeds is not None:
+                                if pred_speeds.ndim == 1 and i < len(pred_speeds):
+                                    predicted_speed = float(pred_speeds[i])
+                                elif pred_speeds.ndim == 0:
+                                    predicted_speed = float(pred_speeds)
+                            
+                            # Fallback to last known speed if predicted speed not available
+                            if predicted_speed is None and not trajectory.empty:
+                                last_row = trajectory.iloc[-1]
+                                if 'SOG' in last_row and pd.notna(last_row.get('SOG')):
+                                    predicted_speed = float(last_row['SOG'])
+                            
+                            # Default speed if still not available
+                            if predicted_speed is None:
+                                predicted_speed = 10.0  # Default 10 knots
+                            
+                            # Get uncertainty for this point
+                            # Uncertainty is an angular offset from the predicted course: C ± (U × 0.5)
+                            # Point number is i+1 (since i is 0-indexed: first point is i=0, point number 1)
+                            point_number = i + 1
+                            
+                            if position_std.ndim == 2 and i < position_std.shape[0]:
+                                # Get uncertainty in degrees (mean of lat/lon std)
+                                std_lat = float(position_std[i, 0])
+                                std_lon = float(position_std[i, 1])
+                                uncertainty_degrees = (std_lat + std_lon) / 2.0
+                                
+                                # Angular offset from predicted course: U × 0.5
+                                base_angular_offset = uncertainty_degrees * 0.5
+                                
+                                # Apply same multiplier as uncertainty circles: (point_number) × (1/8)
+                                uncertainty_multiplier = point_number * (1.0 / 8.0)
+                                angular_offset = base_angular_offset * uncertainty_multiplier
+                            else:
+                                # Fallback: use a default angular uncertainty with multiplier
+                                base_angular_offset = 2.0  # 2° base
+                                uncertainty_multiplier = point_number * (1.0 / 8.0)
+                                angular_offset = base_angular_offset * uncertainty_multiplier
+                            
+                            # Calculate distance to project (based on speed and time interval)
+                            # Time interval is 6 hours per prediction step
+                            time_hours = 6.0
+                            projection_distance_nm = predicted_speed * time_hours
+                            
+                            # Validate projection distance is reasonable (max 500 nm for 6 hours at reasonable speed)
+                            max_projection_nm = 500.0
+                            if projection_distance_nm > max_projection_nm:
+                                logger.warning(f"Projection distance too large ({projection_distance_nm:.1f} nm) for point {i}, capping at {max_projection_nm} nm")
+                                projection_distance_nm = max_projection_nm
+                            
+                            # Validate angular offset is reasonable (max 45 degrees)
+                            max_angular_offset = 45.0
+                            if angular_offset > max_angular_offset:
+                                logger.warning(f"Angular offset too large ({angular_offset:.1f}°) for point {i}, capping at {max_angular_offset}°")
+                                angular_offset = max_angular_offset
+                            
+                            # Calculate left and right bound courses (angular offset from predicted course)
+                            # Left bound course: C - (U × 0.5)
+                            left_bound_course = (predicted_course - angular_offset) % 360
+                            # Project from previous bound point (or last known position for first point)
+                            if i == 0:
+                                # For first point, project from last known position
+                                prev_left_lat, prev_left_lon = last_lat, last_lon
+                            else:
+                                # For subsequent points, project from previous bound point
+                                prev_left_lat, prev_left_lon = lower_points[-1]
+                            
+                            # Log confidence interval bounds calculation
+                            logger.info(f"[Predicted Point {i}] Confidence Interval Bounds Calculation:")
+                            logger.info(f"  Input Variables:")
+                            logger.info(f"    predicted_course (COG) = {predicted_course:.3f}°")
+                            if position_std.ndim == 2 and i < position_std.shape[0]:
+                                logger.info(f"    uncertainty_degrees = {uncertainty_degrees:.6f}°")
+                                logger.info(f"    base_angular_offset = uncertainty_degrees × 0.5 = {base_angular_offset:.6f}°")
+                            else:
+                                logger.info(f"    base_angular_offset = 2.0° (fallback)")
+                            logger.info(f"    point_number = {point_number}")
+                            logger.info(f"    uncertainty_multiplier ({point_number} × 1/8) = {uncertainty_multiplier:.6f}")
+                            logger.info(f"    angular_offset = base_angular_offset × uncertainty_multiplier = {angular_offset:.6f}°")
+                            logger.info(f"    predicted_speed = {predicted_speed:.2f} knots")
+                            logger.info(f"    time_hours = {time_hours:.1f} hours")
+                            logger.info(f"  Calculated Variables:")
+                            logger.info(f"    projection_distance_nm = predicted_speed × time_hours = {projection_distance_nm:.2f} nm")
+                            
+                            left_lat, left_lon = offset_point_by_bearing(prev_left_lat, prev_left_lon, left_bound_course, projection_distance_nm)
+                            
+                            logger.info(f"  Left Bound (Port):")
+                            logger.info(f"    left_bound_course = (predicted_course - angular_offset) % 360 = ({predicted_course:.3f} - {angular_offset:.6f}) % 360 = {left_bound_course:.3f}°")
+                            logger.info(f"    prev_left_position = ({prev_left_lat:.6f}°, {prev_left_lon:.6f}°)")
+                            
+                            # Validate coordinates are reasonable (within valid lat/lon range)
+                            if -90 <= left_lat <= 90 and -180 <= left_lon <= 180:
+                                lower_points.append([left_lat, left_lon])
+                                logger.info(f"    left_bound_position = ({left_lat:.6f}°, {left_lon:.6f}°) [VALID]")
+                            else:
+                                logger.warning(f"    Invalid left bound coordinates for point {i}: lat={left_lat}, lon={left_lon}")
+                                # Use predicted point as fallback
+                                lower_points.append([curr_lat, curr_lon])
+                                logger.info(f"    left_bound_position = ({curr_lat:.6f}°, {curr_lon:.6f}°) [FALLBACK]")
+                            
+                            # Right bound course: C + (U × 0.5)
+                            right_bound_course = (predicted_course + angular_offset) % 360
+                            # Project from previous bound point (or last known position for first point)
+                            if i == 0:
+                                # For first point, project from last known position
+                                prev_right_lat, prev_right_lon = last_lat, last_lon
+                            else:
+                                # For subsequent points, project from previous bound point
+                                prev_right_lat, prev_right_lon = upper_points[-1]
+                            
+                            right_lat, right_lon = offset_point_by_bearing(prev_right_lat, prev_right_lon, right_bound_course, projection_distance_nm)
+                            
+                            logger.info(f"  Right Bound (Starboard):")
+                            logger.info(f"    right_bound_course = (predicted_course + angular_offset) % 360 = ({predicted_course:.3f} + {angular_offset:.6f}) % 360 = {right_bound_course:.3f}°")
+                            logger.info(f"    prev_right_position = ({prev_right_lat:.6f}°, {prev_right_lon:.6f}°)")
+                            
+                            # Validate coordinates are reasonable (within valid lat/lon range)
+                            if -90 <= right_lat <= 90 and -180 <= right_lon <= 180:
+                                upper_points.append([right_lat, right_lon])
+                                logger.info(f"    right_bound_position = ({right_lat:.6f}°, {right_lon:.6f}°) [VALID]")
+                            else:
+                                logger.warning(f"    Invalid right bound coordinates for point {i}: lat={right_lat}, lon={right_lon}")
+                                # Use predicted point as fallback
+                                upper_points.append([curr_lat, curr_lon])
+                                logger.info(f"    right_bound_position = ({curr_lat:.6f}°, {curr_lon:.6f}°) [FALLBACK]")
+                        
+                        # Add confidence interval lines (solid, same weight as predicted path)
+                        if len(lower_points) > 1 and len(upper_points) > 1:
+                            # Smooth the polygon edges using Chaikin's corner cutting algorithm
+                            def smooth_polyline(points, iterations=2):
+                                """
+                                Smooth a polyline using Chaikin's corner cutting algorithm.
+                                Each iteration adds more points and smooths the curve.
+                                """
+                                if len(points) < 2:
+                                    return points
+                                
+                                smoothed = points.copy()
+                                for _ in range(iterations):
+                                    new_points = []
+                                    for i in range(len(smoothed) - 1):
+                                        # Get two consecutive points
+                                        p1 = smoothed[i]
+                                        p2 = smoothed[i + 1]
+                                        
+                                        # Calculate 1/4 and 3/4 points (Chaikin's algorithm)
+                                        q1_lat = p1[0] * 0.75 + p2[0] * 0.25
+                                        q1_lon = p1[1] * 0.75 + p2[1] * 0.25
+                                        q2_lat = p1[0] * 0.25 + p2[0] * 0.75
+                                        q2_lon = p1[1] * 0.25 + p2[1] * 0.75
+                                        
+                                        new_points.append([q1_lat, q1_lon])
+                                        new_points.append([q2_lat, q2_lon])
+                                    
+                                    # Keep the last point
+                                    new_points.append(smoothed[-1])
+                                    smoothed = new_points
+                                
+                                return smoothed
+                            
+                            # Apply smoothing to boundary points
+                            smoothed_lower_points = smooth_polyline(lower_points, iterations=2)
+                            smoothed_upper_points = smooth_polyline(upper_points, iterations=2)
+                            
+                            # Add smoothed boundary lines (solid, same weight as predicted path)
+                            # Left bound line (smoothed)
+                            folium.PolyLine(smoothed_lower_points, color='orange', weight=3, opacity=0.8,
+                                          popup="Lower 68% Confidence (Port)",
+                                          tooltip="Lower 68% Confidence Bound (Port Side)").add_to(m)
+                            logger.info(f"Added smoothed lower confidence bound (perpendicular to predicted course) with {len(smoothed_lower_points)} points")
+                            
+                            # Right bound line (smoothed)
+                            folium.PolyLine(smoothed_upper_points, color='orange', weight=3, opacity=0.8,
+                                          popup="Upper 68% Confidence (Starboard)",
+                                          tooltip="Upper 68% Confidence Bound (Starboard Side)").add_to(m)
+                            logger.info(f"Added smoothed upper confidence bound (perpendicular to predicted course) with {len(smoothed_upper_points)} points")
+                        elif len(lower_points) > 1:
+                            # Only left bound available
+                            folium.PolyLine(lower_points, color='orange', weight=3, opacity=0.8,
+                                          popup="Lower 68% Confidence (Port)",
+                                          tooltip="Lower 68% Confidence Bound (Port Side)").add_to(m)
+                            logger.info(f"Added lower confidence bound (perpendicular to predicted course) with {len(lower_points)} points")
+                        elif len(upper_points) > 1:
+                            # Only right bound available
+                            folium.PolyLine(upper_points, color='orange', weight=3, opacity=0.8,
+                                          popup="Upper 68% Confidence (Starboard)",
+                                          tooltip="Upper 68% Confidence Bound (Starboard Side)").add_to(m)
+                            logger.info(f"Added upper confidence bound (perpendicular to predicted course) with {len(upper_points)} points")
+                    else:
+                        logger.warning(f"Cannot calculate perpendicular confidence intervals: position_mean shape={position_mean.shape if hasattr(position_mean, 'shape') else 'N/A'}, position_std={position_std is not None}")
+                    
+                    # Add predicted position markers (only for valid coordinates)
+                    # Get vessel information from trajectory for popup
+                    vessel_name = None
+                    if not trajectory.empty:
+                        if 'VesselName' in trajectory.columns:
+                            vessel_name = trajectory['VesselName'].iloc[-1] if pd.notna(trajectory['VesselName'].iloc[-1]) else None
+                    
+                    # Get last known values for reference
+                    last_cog = None
+                    last_heading = None
+                    last_sog = None
+                    last_datetime = last_time
+                    if not trajectory.empty:
+                        last_row = trajectory.iloc[-1]
+                        if 'COG' in last_row and pd.notna(last_row.get('COG')):
+                            last_cog = float(last_row['COG'])
+                        if 'Heading' in last_row and pd.notna(last_row.get('Heading')):
+                            last_heading = float(last_row['Heading'])
+                        if 'SOG' in last_row and pd.notna(last_row.get('SOG')):
+                            last_sog = float(last_row['SOG'])
+                        if 'BaseDateTime' in last_row and pd.notna(last_row.get('BaseDateTime')):
+                            last_datetime = last_row['BaseDateTime']
+                    
+                    for i in range(position_mean.shape[0]):
+                        lat = float(position_mean[i, 0])
+                        lon = float(position_mean[i, 1])
+                        # Only add markers for valid coordinates
+                        if not (np.isnan(lat) or np.isnan(lon) or np.isinf(lat) or np.isinf(lon)):
+                            hours_ahead = (i + 1) * 6  # Assuming 6-hour intervals
+                            
+                            # Calculate predicted datetime
+                            predicted_datetime = None
+                            if last_datetime:
+                                try:
+                                    if isinstance(last_datetime, pd.Timestamp):
+                                        predicted_datetime = last_datetime + pd.Timedelta(hours=hours_ahead)
+                                    elif isinstance(last_datetime, str):
+                                        last_dt = pd.to_datetime(last_datetime)
+                                        predicted_datetime = last_dt + pd.Timedelta(hours=hours_ahead)
+                                    else:
+                                        predicted_datetime = last_datetime + pd.Timedelta(hours=hours_ahead)
+                                except Exception as e:
+                                    logger.debug(f"Could not calculate predicted datetime: {e}")
+                            
+                            # Get uncertainty/std information
+                            if position_std is not None and isinstance(position_std, np.ndarray):
+                                if position_std.ndim == 2:
+                                    std_val = position_std[i].mean()
+                                else:
+                                    std_val = position_std.mean() if position_std.size > 0 else 0.0
+                                std_text = f"±{std_val:.3f}°"
+                            else:
+                                std_text = "N/A"
+                            
+                            # Get predicted speed and course if available
+                            pred_speed = None
+                            pred_course = None
+                            if 'speed' in predictions and isinstance(predictions['speed'], np.ndarray):
+                                speed_array = predictions['speed']
+                                if speed_array.ndim == 1 and i < len(speed_array):
+                                    pred_speed = float(speed_array[i])
+                                elif speed_array.ndim == 0:
+                                    pred_speed = float(speed_array)
+                            if 'course' in predictions and isinstance(predictions['course'], np.ndarray):
+                                course_array = predictions['course']
+                                if course_array.ndim == 1 and i < len(course_array):
+                                    pred_course = float(course_array[i])
+                                elif course_array.ndim == 0:
+                                    pred_course = float(course_array)
+                            
+                            # Build comprehensive popup text
+                            popup_text = f"<b>Predicted Position</b><br>"
+                            popup_text += f"MMSI: {mmsi}<br>"
+                            if vessel_name:
+                                popup_text += f"Vessel: {vessel_name}<br>"
+                            popup_text += f"<b>Prediction:</b><br>"
+                            popup_text += f"Hours Ahead: +{hours_ahead}h<br>"
+                            if predicted_datetime:
+                                popup_text += f"Predicted Date/Time: {predicted_datetime}<br>"
+                            
+                            # Always show predicted position (lat/lon) prominently
+                            popup_text += f"<b>Predicted Position:</b><br>"
+                            popup_text += f"Latitude: {lat:.6f}°<br>"
+                            popup_text += f"Longitude: {lon:.6f}°<br>"
+                            
+                            # Always show predicted SOG and COG prominently
+                            popup_text += f"<b>Predicted Motion:</b><br>"
+                            if pred_speed is not None:
+                                popup_text += f"Predicted SOG: {pred_speed:.2f} knots<br>"
+                            else:
+                                popup_text += f"Predicted SOG: N/A"
+                                if last_sog is not None:
+                                    popup_text += f" (Last Known: {last_sog:.2f} knots)<br>"
+                                else:
+                                    popup_text += f"<br>"
+                            
+                            if pred_course is not None:
+                                popup_text += f"Predicted COG: {pred_course:.1f}°<br>"
+                            else:
+                                popup_text += f"Predicted COG: N/A"
+                                if last_cog is not None:
+                                    popup_text += f" (Last Known: {last_cog:.1f}°)<br>"
+                                else:
+                                    popup_text += f"<br>"
+                            
+                            # Additional information
+                            if last_heading is not None:
+                                popup_text += f"<br>Last Known Heading: {last_heading:.1f}°<br>"
+                            popup_text += f"<br>Uncertainty: {std_text}"
+                            
+                            # Build tooltip text (shorter version for hover)
+                            tooltip_text = f"<b>Predicted Position</b><br>"
+                            tooltip_text += f"Vessel: {mmsi}<br>"
+                            if vessel_name:
+                                tooltip_text += f"{vessel_name}<br>"
+                            tooltip_text += f"+{hours_ahead}h"
+                            
+                            folium.CircleMarker(
+                                [lat, lon],
+                                radius=5,
+                                popup=folium.Popup(popup_text, max_width=300),
+                                tooltip=folium.Tooltip(tooltip_text, sticky=False),
+                                color='green',
+                                fill=True,
+                                fillColor='green',
+                                fillOpacity=0.7
+                            ).add_to(m)
+                            
+                            # Add orange circle around predicted point to represent uncertainty
+                            # Calculate uncertainty radius as 1/2 the distance between upper and lower bounds
+                            uncertainty_meters = None
+                            uncertainty_degrees = None
+                            
+                            # Check if we have upper and lower bounds for this point
+                            # Note: lower_points[0] and upper_points[0] are the last known position
+                            # So for predicted point i, we need lower_points[i+1] and upper_points[i+1]
+                            try:
+                                if len(lower_points) > i + 1 and len(upper_points) > i + 1:
+                                    lower_bound_point = lower_points[i + 1]
+                                    upper_bound_point = upper_points[i + 1]
+                                    
+                                    lower_lat, lower_lon = lower_bound_point[0], lower_bound_point[1]
+                                    upper_lat, upper_lon = upper_bound_point[0], upper_bound_point[1]
+                                    
+                                    # Calculate distance between upper and lower bounds
+                                    distance_between_bounds_meters = haversine_distance_meters(
+                                        lower_lat, lower_lon, upper_lat, upper_lon
+                                    )
+                                    
+                                    # If distance is 0 or very small (e.g., due to zero projection distance),
+                                    # calculate it based on angular separation at the predicted point
+                                    if distance_between_bounds_meters < 1.0:  # Less than 1 meter
+                                        # Get the angular offset that was used for this point
+                                        # We need to recalculate it or get it from the bounds calculation
+                                        # For now, use the uncertainty from position_std if available
+                                        if position_std is not None and isinstance(position_std, np.ndarray):
+                                            if position_std.ndim == 2 and i < position_std.shape[0]:
+                                                std_lat = float(position_std[i, 0])
+                                                std_lon = float(position_std[i, 1])
+                                                uncertainty_degrees_for_calc = (std_lat + std_lon) / 2.0
+                                                # Angular offset: U × 0.5
+                                                base_angular_offset_for_calc = uncertainty_degrees_for_calc * 0.5
+                                                # Apply same multiplier as uncertainty circles: (point_number) × (1/8)
+                                                point_number_for_calc = i + 1
+                                                uncertainty_multiplier_for_calc = point_number_for_calc * (1.0 / 8.0)
+                                                angular_offset_for_calc = base_angular_offset_for_calc * uncertainty_multiplier_for_calc
+                                                # Cap at 45 degrees
+                                                angular_offset_for_calc = min(angular_offset_for_calc, 45.0)
+                                            else:
+                                                # Fallback: use a default angular offset with multiplier
+                                                base_angular_offset_for_calc = 2.0  # 2° base
+                                                point_number_for_calc = i + 1
+                                                uncertainty_multiplier_for_calc = point_number_for_calc * (1.0 / 8.0)
+                                                angular_offset_for_calc = base_angular_offset_for_calc * uncertainty_multiplier_for_calc
+                                                angular_offset_for_calc = min(angular_offset_for_calc, 45.0)
+                                        else:
+                                            # Fallback: use a default angular offset with multiplier
+                                            base_angular_offset_for_calc = 2.0  # 2° base
+                                            point_number_for_calc = i + 1
+                                            uncertainty_multiplier_for_calc = point_number_for_calc * (1.0 / 8.0)
+                                            angular_offset_for_calc = base_angular_offset_for_calc * uncertainty_multiplier_for_calc
+                                            angular_offset_for_calc = min(angular_offset_for_calc, 45.0)
+                                        
+                                        # Calculate the distance between bounds based on angular separation
+                                        # Use the predicted point as center and project bounds at angular offset
+                                        # Use a reasonable base distance (e.g., 1 nm) for the calculation
+                                        base_distance_nm = 1.0  # 1 nautical mile base distance
+                                        
+                                        # Get predicted course for this point (use pred_course if available, or calculate from positions)
+                                        predicted_course_for_calc = None
+                                        if pred_course is not None:
+                                            predicted_course_for_calc = pred_course
+                                        else:
+                                            # Calculate course from position_mean array
+                                            if i == 0:
+                                                # From last known position to first predicted point
+                                                predicted_course_for_calc = calculate_bearing(last_lat, last_lon, lat, lon)
+                                            elif i > 0:
+                                                # From previous predicted point to current predicted point
+                                                prev_lat = float(position_mean[i - 1, 0])
+                                                prev_lon = float(position_mean[i - 1, 1])
+                                                if not (np.isnan(prev_lat) or np.isnan(prev_lon)):
+                                                    predicted_course_for_calc = calculate_bearing(prev_lat, prev_lon, lat, lon)
+                                            # Fallback to last known COG if available
+                                            if predicted_course_for_calc is None and last_cog is not None:
+                                                predicted_course_for_calc = last_cog
+                                        
+                                        # Project lower and upper bounds from predicted point
+                                        if predicted_course_for_calc is not None:
+                                            left_bound_course_calc = (predicted_course_for_calc - angular_offset_for_calc) % 360
+                                            right_bound_course_calc = (predicted_course_for_calc + angular_offset_for_calc) % 360
+                                        else:
+                                            # Fallback: use 0° and angular_offset
+                                            left_bound_course_calc = (360.0 - angular_offset_for_calc) % 360
+                                            right_bound_course_calc = angular_offset_for_calc % 360
+                                        
+                                        # Calculate bounds positions from predicted point
+                                        calc_lower_lat, calc_lower_lon = offset_point_by_bearing(lat, lon, left_bound_course_calc, base_distance_nm)
+                                        calc_upper_lat, calc_upper_lon = offset_point_by_bearing(lat, lon, right_bound_course_calc, base_distance_nm)
+                                        
+                                        # Calculate distance between these calculated bounds
+                                        distance_between_bounds_meters = haversine_distance_meters(
+                                            calc_lower_lat, calc_lower_lon, calc_upper_lat, calc_upper_lon
+                                        )
+                                        
+                                        logger.info(f"  [Distance Calculation] Bounds were at same location, calculated from angular separation:")
+                                        logger.info(f"    Angular offset: {angular_offset_for_calc:.3f}°")
+                                        logger.info(f"    Base distance: {base_distance_nm:.2f} nm")
+                                        logger.info(f"    Calculated distance: {distance_between_bounds_meters:.2f} m ({distance_between_bounds_meters/1000:.3f} km)")
+                                    
+                                    # Radius is 1/2 the distance between bounds
+                                    base_uncertainty_meters = distance_between_bounds_meters / 2.0
+                                    
+                                    # Multiply uncertainty by (point number) × (1/8)
+                                    # Point number is i+1 (since i is 0-indexed: first point is i=0, point number 1)
+                                    # This makes uncertainty increase with point number (further predictions have more uncertainty)
+                                    point_number = i + 1
+                                    uncertainty_multiplier = point_number * (1.0 / 8.0)
+                                    uncertainty_meters_unclamped = base_uncertainty_meters * uncertainty_multiplier
+                                    
+                                    # Convert to degrees for display (approximate)
+                                    # 1 degree latitude ≈ 111,000 meters
+                                    lat_rad = math.radians(lat)
+                                    meters_per_degree_lat = 111000.0
+                                    meters_per_degree_lon = 111000.0 * math.cos(lat_rad)
+                                    avg_meters_per_degree = (meters_per_degree_lat + meters_per_degree_lon) / 2.0
+                                    uncertainty_degrees = uncertainty_meters_unclamped / avg_meters_per_degree
+                                    
+                                    # Set reasonable bounds for circle radius (min 100m, max 50km)
+                                    min_radius_meters = 100.0
+                                    max_radius_meters = 50000.0  # 50 km max
+                                    uncertainty_meters = max(min_radius_meters, min(uncertainty_meters_unclamped, max_radius_meters))
+                                    
+                                    # Comprehensive logging for uncertainty circle calculation
+                                    logger.info(f"[Predicted Point {i}] Uncertainty Circle Calculation:")
+                                    logger.info(f"  Position: lat={lat:.6f}°, lon={lon:.6f}°")
+                                    logger.info(f"  Hours Ahead: {hours_ahead}h")
+                                    logger.info(f"  Point Number: {point_number}")
+                                    logger.info(f"  Lower Bound: lat={lower_lat:.6f}°, lon={lower_lon:.6f}°")
+                                    logger.info(f"  Upper Bound: lat={upper_lat:.6f}°, lon={upper_lon:.6f}°")
+                                    logger.info(f"  Distance Between Bounds: {distance_between_bounds_meters:.2f} m ({distance_between_bounds_meters/1000:.3f} km)")
+                                    logger.info(f"  Base Radius (1/2 distance): {base_uncertainty_meters:.2f} m ({base_uncertainty_meters/1000:.3f} km)")
+                                    logger.info(f"  Uncertainty Multiplier ({point_number} × 1/8): {uncertainty_multiplier:.6f}")
+                                    logger.info(f"  Adjusted Radius: {uncertainty_meters:.2f} m ({uncertainty_meters/1000:.3f} km)")
+                                    logger.info(f"  Uncertainty (degrees): {uncertainty_degrees:.6f}°")
+                                    
+                                    # Only add circle if radius is reasonable
+                                    if uncertainty_meters <= max_radius_meters:
+                                        # Add orange circle to represent uncertainty
+                                        folium.Circle(
+                                            [lat, lon],
+                                            radius=uncertainty_meters,
+                                            popup=f"Uncertainty: ±{uncertainty_degrees:.4f}° ({uncertainty_meters/1000:.2f} km)",
+                                            tooltip=f"Uncertainty Radius: {uncertainty_meters/1000:.2f} km",
+                                            color='orange',
+                                            fill=True,
+                                            fillColor='orange',
+                                            fillOpacity=0.2,
+                                            weight=2,
+                                            opacity=0.5
+                                        ).add_to(m)
+                                        logger.info(f"  [Circle Added] Radius: {uncertainty_meters:.2f} m ({uncertainty_meters/1000:.3f} km)")
+                                    else:
+                                        logger.warning(f"  [Circle Skipped] Uncertainty radius too large ({uncertainty_meters/1000:.2f} km) for point {i}")
+                                else:
+                                    logger.debug(f"[Point {i}] Upper/lower bounds not available for uncertainty circle calculation")
+                            except (NameError, UnboundLocalError):
+                                logger.debug(f"[Point {i}] Upper/lower bounds not calculated (confidence intervals not available)")
+                else:
+                    raise ValueError(f"position_mean has invalid shape: {position_mean.shape}, expected (time_steps, 2)")
+                
+                # Calculate diameter of uncertainty circle for last predicted point at 1 order of magnitude error
+                magnitude_info = ""
+                if position_mean.ndim == 2 and position_mean.shape[0] > 0:
+                    last_point_idx = position_mean.shape[0] - 1  # Last predicted point (48 hours ahead)
+                    
+                    if position_std is not None and isinstance(position_std, np.ndarray):
+                        if position_std.ndim == 2 and last_point_idx < position_std.shape[0]:
+                            # Get uncertainty for last point
+                            std_lat = float(position_std[last_point_idx, 0])
+                            std_lon = float(position_std[last_point_idx, 1])
+                            
+                            # Validate uncertainty values
+                            max_reasonable_std = 1.0
+                            if std_lat <= max_reasonable_std and std_lon <= max_reasonable_std:
+                                # Get last predicted point coordinates
+                                last_pred_lat = float(position_mean[last_point_idx, 0])
+                                last_pred_lon = float(position_mean[last_point_idx, 1])
+                                
+                                # Use the same calculation method as uncertainty circles:
+                                # 1. Get distance between bounds for the last point
+                                # 2. Base uncertainty = 1/2 the distance between bounds
+                                # 3. Apply multiplier (point_number × 1/8)
+                                # 4. Multiply by 10 for 1 order of magnitude error
+                                
+                                # Check if we have upper and lower bounds for the last point
+                                if len(lower_points) > last_point_idx + 1 and len(upper_points) > last_point_idx + 1:
+                                    lower_bound_point = lower_points[last_point_idx + 1]
+                                    upper_bound_point = upper_points[last_point_idx + 1]
+                                    
+                                    lower_lat = lower_bound_point[0]
+                                    lower_lon = lower_bound_point[1]
+                                    upper_lat = upper_bound_point[0]
+                                    upper_lon = upper_bound_point[1]
+                                    
+                                    # Calculate distance between upper and lower bounds
+                                    distance_between_bounds_meters = haversine_distance_meters(
+                                        lower_lat, lower_lon, upper_lat, upper_lon
+                                    )
+                                    
+                                    # If distance is 0 or very small, calculate from angular separation
+                                    if distance_between_bounds_meters < 1.0:
+                                        # Use same fallback calculation as uncertainty circles
+                                        uncertainty_degrees_for_calc = (std_lat + std_lon) / 2.0
+                                        base_angular_offset_for_calc = uncertainty_degrees_for_calc * 0.5
+                                        point_number_for_calc = last_point_idx + 1
+                                        uncertainty_multiplier_for_calc = point_number_for_calc * (1.0 / 8.0)
+                                        angular_offset_for_calc = base_angular_offset_for_calc * uncertainty_multiplier_for_calc
+                                        angular_offset_for_calc = min(angular_offset_for_calc, 45.0)
+                                        
+                                        # Calculate bounds from predicted point
+                                        base_distance_nm = 1.0
+                                        # Get predicted course for calculation
+                                        if last_point_idx > 0:
+                                            prev_lat = float(position_mean[last_point_idx - 1, 0])
+                                            prev_lon = float(position_mean[last_point_idx - 1, 1])
+                                            predicted_course_for_calc = calculate_bearing(prev_lat, prev_lon, last_pred_lat, last_pred_lon)
+                                        else:
+                                            predicted_course_for_calc = 0.0
+                                        
+                                        left_bound_course_calc = (predicted_course_for_calc - angular_offset_for_calc) % 360
+                                        right_bound_course_calc = (predicted_course_for_calc + angular_offset_for_calc) % 360
+                                        
+                                        calc_lower_lat, calc_lower_lon = offset_point_by_bearing(last_pred_lat, last_pred_lon, left_bound_course_calc, base_distance_nm)
+                                        calc_upper_lat, calc_upper_lon = offset_point_by_bearing(last_pred_lat, last_pred_lon, right_bound_course_calc, base_distance_nm)
+                                        
+                                        distance_between_bounds_meters = haversine_distance_meters(
+                                            calc_lower_lat, calc_lower_lon, calc_upper_lat, calc_upper_lon
+                                        )
+                                    
+                                    # Base uncertainty = 1/2 the distance between bounds (same as uncertainty circles)
+                                    base_uncertainty_meters = distance_between_bounds_meters / 2.0
+                                    
+                                    # Apply same multiplier as uncertainty circles: (point_number) × (1/8)
+                                    point_number = last_point_idx + 1
+                                    uncertainty_multiplier = point_number * (1.0 / 8.0)
+                                    adjusted_uncertainty_meters = base_uncertainty_meters * uncertainty_multiplier
+                                    
+                                    # Calculate for 1 order of magnitude error (10x the adjusted uncertainty)
+                                    magnitude_error_factor = 10.0
+                                    radius_1magnitude_meters = adjusted_uncertainty_meters * magnitude_error_factor
+                                    
+                                    # Diameter = 2 * radius
+                                    diameter_1magnitude_meters = 2.0 * radius_1magnitude_meters
+                                    diameter_1magnitude_km = diameter_1magnitude_meters / 1000.0
+                                    diameter_1magnitude_nm = diameter_1magnitude_meters / 1852.0  # 1 nm = 1852 m
+                                    
+                                    # Log the calculation
+                                    logger.info(f"[Last Predicted Point] Uncertainty Circle Diameter Calculation (1 Order of Magnitude Error):")
+                                    logger.info(f"  Point Index: {last_point_idx} (48 hours ahead)")
+                                    logger.info(f"  Position: lat={last_pred_lat:.6f}°, lon={last_pred_lon:.6f}°")
+                                    logger.info(f"  Input Variables:")
+                                    logger.info(f"    std_lat = {std_lat:.6f}°")
+                                    logger.info(f"    std_lon = {std_lon:.6f}°")
+                                    logger.info(f"  Calculated Variables:")
+                                    logger.info(f"    Distance Between Bounds: {distance_between_bounds_meters:.2f} m ({distance_between_bounds_meters/1000:.3f} km)")
+                                    logger.info(f"    Base Uncertainty (1/2 distance): {base_uncertainty_meters:.2f} m ({base_uncertainty_meters/1000:.3f} km)")
+                                    logger.info(f"    Point Number: {point_number}")
+                                    logger.info(f"    Uncertainty Multiplier ({point_number} × 1/8): {uncertainty_multiplier:.6f}")
+                                    logger.info(f"    Adjusted Uncertainty: {adjusted_uncertainty_meters:.2f} m ({adjusted_uncertainty_meters/1000:.3f} km)")
+                                    logger.info(f"  For 1 Order of Magnitude Error (10× adjusted uncertainty):")
+                                    logger.info(f"    magnitude_error_factor = {magnitude_error_factor}")
+                                    logger.info(f"    radius_1magnitude_meters = adjusted_uncertainty × {magnitude_error_factor} = {radius_1magnitude_meters:.2f} m ({radius_1magnitude_meters/1000:.3f} km)")
+                                    logger.info(f"    diameter_1magnitude_meters = 2 × radius = {diameter_1magnitude_meters:.2f} m")
+                                    logger.info(f"    diameter_1magnitude_km = {diameter_1magnitude_km:.3f} km")
+                                    logger.info(f"    diameter_1magnitude_nm = {diameter_1magnitude_nm:.3f} nautical miles")
+                                    
+                                    # Display in message box or add to popup
+                                    magnitude_info = (f"\n\nUncertainty Circle (1 Order of Magnitude Error) for Last Point:\n"
+                                                    f"Diameter: {diameter_1magnitude_km:.3f} km ({diameter_1magnitude_nm:.3f} nm)\n"
+                                                    f"Radius: {radius_1magnitude_meters/1000:.3f} km ({radius_1magnitude_meters/1852:.3f} nm)")
+                                else:
+                                    logger.warning(f"Cannot calculate 1 magnitude error diameter: bounds not available for last point")
+                                    magnitude_info = "\n\nUncertainty Circle (1 Order of Magnitude Error): Calculation skipped (bounds not available)"
+                            else:
+                                logger.warning(f"Cannot calculate 1 magnitude error diameter: uncertainty values too large (std_lat={std_lat}, std_lon={std_lon})")
+                                magnitude_info = "\n\nUncertainty Circle (1 Order of Magnitude Error): Calculation skipped (invalid uncertainty values)"
+                        else:
+                            logger.warning(f"Cannot calculate 1 magnitude error diameter: position_std shape invalid")
+                            magnitude_info = "\n\nUncertainty Circle (1 Order of Magnitude Error): Calculation skipped (no uncertainty data)"
+                    else:
+                        logger.warning(f"Cannot calculate 1 magnitude error diameter: position_std not available")
+                        magnitude_info = "\n\nUncertainty Circle (1 Order of Magnitude Error): Calculation skipped (no uncertainty data)"
+            except Exception as e:
+                logger.error(f"Error creating prediction visualization: {e}")
+                logger.error(f"position_mean shape: {position_mean.shape if hasattr(position_mean, 'shape') else 'N/A'}")
+                raise
             
-            output_dir.mkdir(parents=True, exist_ok=True)
-            map_path = output_dir / f"ml_prediction_vessel_{mmsi}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
+            # Save map to Path_Maps subdirectory (use self.analysis.get_map_output_directory())
+            # Ensure we always use the Path_Maps directory, never the project folder
+            if not hasattr(self, 'analysis') or not hasattr(self.analysis, 'get_map_output_directory'):
+                raise ValueError("Analysis object not properly initialized")
+            
+            # Get map output directory (Path_Maps subdirectory)
+            map_dir = self.analysis.get_map_output_directory()
+            
+            # Generate unique filename with timestamp
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            map_path = map_dir / f"ml_prediction_vessel_{mmsi}_{timestamp}.html"
+            
+            # Verify we're not saving to project folder (current working directory)
+            project_folder = Path.cwd()
+            if map_path.parent == project_folder:
+                logger.warning(f"Map path is in project folder, redirecting to Path_Maps directory")
+                map_path = map_dir / f"ml_prediction_vessel_{mmsi}_{timestamp}.html"
+            
+            logger.info(f"Saving prediction map to Path_Maps directory: {map_path}")
+            logger.info(f"Map directory: {map_dir}, Project folder: {project_folder}")
             m.save(str(map_path))
             
-            # Show success message and open map
+            # Show success message with predicted coordinates list
+            coord_text = "\n\nPredicted Coordinates:\n"
+            if predicted_coords:
+                for coord in predicted_coords:
+                    coord_text += f"  +{coord['hours_ahead']}h: ({coord['lat']:.4f}, {coord['lon']:.4f})\n"
+            else:
+                coord_text += "  No valid predicted coordinates generated\n"
+            
             messagebox.showinfo("Prediction Complete", 
                               f"ML Course Prediction complete for vessel {mmsi}!\n\n"
                               f"Map saved to: {map_path}\n\n"
@@ -5072,7 +6348,9 @@ class AdvancedAnalysisGUI:
                               f"- Blue line: Historical trajectory\n"
                               f"- Red marker: Last known position\n"
                               f"- Green line: Predicted path (48 hours)\n"
-                              f"- Orange lines: 68% confidence intervals")
+                              f"- Orange lines: 68% confidence intervals"
+                              + coord_text
+                              + magnitude_info)
             
             open_file(str(map_path))
             
@@ -5082,24 +6360,54 @@ class AdvancedAnalysisGUI:
             messagebox.showerror("Error", f"Failed to create visualization: {str(e)}")    
     
     def _run_anomaly_analysis(self):
-        """Run analysis based on selected anomaly types"""
-        # Get selected anomaly types
-        selected_anomalies = [name for name, var in self.anomaly_types.items() if var.get()]
+        """Run analysis based on selected anomaly types and vessel types"""
+        # Get selected anomaly types from Anomaly Types tab (GUI names)
+        selected_anomalies_gui = [name for name, var in self.anomaly_types.items() if var.get()]
         
-        if not selected_anomalies:
+        if not selected_anomalies_gui:
             messagebox.showwarning("No Selection", "Please select at least one anomaly type.")
             return
         
+        # Convert GUI anomaly type names to data format
+        selected_anomaly_types = [map_anomaly_type_gui_to_data(gui_name) for gui_name in selected_anomalies_gui]
+        # Remove duplicates (e.g., "Excessive Travel Distance (Fast)" and "Excessive Travel Distance (Slow)" both map to "Speed")
+        selected_anomaly_types = list(set(selected_anomaly_types))
+        
+        # Get selected vessel types from Vessel Selection tab
+        selected_vessel_types = [vtype for vtype, details in self.ship_types.items() if details['var'].get()]
+        
+        if not selected_vessel_types:
+            messagebox.showwarning("No Selection", "Please select at least one vessel type in the Vessel Selection tab.")
+            return
+        
+        # Limit to 2 vessel types and 2 anomaly types (same as correlation analysis dialog)
+        if len(selected_vessel_types) > 2:
+            messagebox.showwarning("Too Many Selections", 
+                                 f"You have selected {len(selected_vessel_types)} vessel types. "
+                                 "Correlation analysis supports up to 2 vessel types. "
+                                 "Using the first 2 selected types.")
+            selected_vessel_types = selected_vessel_types[:2]
+        
+        if len(selected_anomaly_types) > 2:
+            messagebox.showwarning("Too Many Selections", 
+                                 f"You have selected {len(selected_anomalies_gui)} anomaly types. "
+                                 "Correlation analysis supports up to 2 anomaly types. "
+                                 "Using the first 2 selected types.")
+            selected_anomaly_types = selected_anomaly_types[:2]
+        
         # Show a confirmation dialog
-        confirm = messagebox.askyesno("Confirm Analysis", 
-                                    f"Run analysis with {len(selected_anomalies)} selected anomaly types?")
+        vessel_names = [get_vessel_type_name(vt) for vt in selected_vessel_types]
+        confirm_msg = (f"Run correlation analysis with:\n\n"
+                      f"Vessel Types ({len(selected_vessel_types)}): {', '.join([f'Type {vt} ({name})' for vt, name in zip(selected_vessel_types, vessel_names)])}\n\n"
+                      f"Anomaly Types ({len(selected_anomaly_types)}): {', '.join(selected_anomaly_types)}")
+        confirm = messagebox.askyesno("Confirm Analysis", confirm_msg)
         if not confirm:
             return
         
         progress = ProgressDialog(self.window, "Anomaly Analysis", "Running anomaly analysis...")
         try:
             self.status_var.set("Running anomaly analysis...")
-            result = self.analysis.correlation_analysis()
+            result = self.analysis.correlation_analysis(selected_vessel_types, selected_anomaly_types)
             progress.close()
             if result:
                 self.status_var.set(f"Analysis complete: {result}")
@@ -5122,9 +6430,9 @@ class AdvancedAnalysisGUI:
             messagebox.showerror("Error", f"Analysis failed: {str(e)}")
     
     def _create_tab5_anomaly_types(self):
-        """Create the Anomaly Types tab with checkboxes for each type and thresholds"""
+        """Create the Correlation Analysis tab with checkboxes for each type and thresholds"""
         anomaly_frame = ttk.Frame(self.notebook, padding=10)
-        self.notebook.add(anomaly_frame, text="Anomaly Types")
+        self.notebook.add(anomaly_frame, text="Correlation Analysis")
         
         # Left panel - anomaly types selection
         types_frame = ttk.LabelFrame(anomaly_frame, text="Select Anomaly Types to Detect")
@@ -5162,13 +6470,13 @@ class AdvancedAnalysisGUI:
         ttk.Label(thresholds_frame, text="Minimum speed for check (knots):").grid(row=5, column=0, sticky=tk.W, padx=5, pady=5)
         ttk.Entry(thresholds_frame, textvariable=self.min_speed_for_cog_check, width=10).grid(row=5, column=1, sticky=tk.W, padx=5, pady=5)
         
-        # Run Analysis button (new)
-        run_frame = ttk.Frame(anomaly_frame)
-        run_frame.grid(row=1, column=0, columnspan=2, sticky=tk.W+tk.E, padx=10, pady=20)
+        # Correlation Analysis section with Run Analysis button
+        correlation_frame = ttk.LabelFrame(anomaly_frame, text="Correlation Analysis")
+        correlation_frame.grid(row=1, column=0, columnspan=2, sticky=tk.W+tk.E, padx=10, pady=20)
         
-        run_btn = tk.Button(run_frame, text="Run Analysis", command=self._run_anomaly_analysis, 
+        run_btn = tk.Button(correlation_frame, text="Run Analysis", command=self._run_anomaly_analysis, 
                           bg="green", fg="white", font=("Arial", 10, "bold"))
-        run_btn.pack(side=tk.RIGHT, padx=10, pady=5)
+        run_btn.pack(side=tk.RIGHT, padx=10, pady=10)
     
     def _create_tab6_analysis_filters(self):
         """Create the Analysis Filters tab with settings for filtering analysis"""
@@ -5210,6 +6518,12 @@ class AdvancedAnalysisGUI:
         ttk.Entry(longitude_frame, textvariable=self.analysis_filters['min_longitude'], width=10).pack(side=tk.LEFT, padx=5)
         ttk.Label(longitude_frame, text="Max:").pack(side=tk.LEFT, padx=5)
         ttk.Entry(longitude_frame, textvariable=self.analysis_filters['max_longitude'], width=10).pack(side=tk.LEFT)
+        
+        # Draw Box button
+        draw_box_frame = ttk.Frame(geo_frame)
+        draw_box_frame.grid(row=2, column=0, columnspan=2, sticky=tk.W, padx=10, pady=5)
+        ttk.Button(draw_box_frame, text="Draw Box on Map", 
+                   command=self.draw_geographic_box).pack(side=tk.LEFT, padx=5, pady=5)
         
         # Time Filter section
         time_frame = ttk.LabelFrame(scrollable_frame, text="Time Filter")
@@ -5407,90 +6721,6 @@ class AdvancedAnalysisGUI:
                 col = 0
                 row += 1
     
-    def _add_zone(self):
-        """Add a new restricted zone"""
-        name = self.zone_name_var.get().strip()
-        if not name:
-            messagebox.showerror("Error", "Please enter a zone name")
-            return
-        
-        # Check for duplicate zone name
-        for zone in self.zone_violations:
-            if zone['name'] == name:
-                messagebox.showerror("Error", f"Zone '{name}' already exists")
-                return
-        
-        try:
-            lat_min = float(self.zone_lat_min_var.get())
-            lat_max = float(self.zone_lat_max_var.get())
-            lon_min = float(self.zone_lon_min_var.get())
-            lon_max = float(self.zone_lon_max_var.get())
-            
-            # Validate coordinates
-            if lat_min < -90 or lat_min > 90 or lat_max < -90 or lat_max > 90:
-                messagebox.showerror("Error", "Latitude must be between -90 and 90 degrees")
-                return
-            
-            if lon_min < -180 or lon_min > 180 or lon_max < -180 or lon_max > 180:
-                messagebox.showerror("Error", "Longitude must be between -180 and 180 degrees")
-                return
-            
-            if lat_min >= lat_max or lon_min >= lon_max:
-                messagebox.showerror("Error", "Min values must be less than max values")
-                return
-            
-            # Add zone to list
-            zone = {
-                'name': name,
-                'lat_min': lat_min,
-                'lat_max': lat_max,
-                'lon_min': lon_min,
-                'lon_max': lon_max
-            }
-            self.zone_violations.append(zone)
-            
-            # Add to listbox
-            self.zones_list_widget.insert(tk.END, name)
-            
-            # Create and add checkbox for this zone
-            self.zone_checkboxes[name] = {'selected': tk.BooleanVar(value=True)}
-            
-            # Clear form
-            self.zone_name_var.set("")
-            
-            messagebox.showinfo("Success", f"Zone '{name}' added")
-            
-        except ValueError as e:
-            messagebox.showerror("Error", f"Invalid coordinate format: {e}")
-    
-    def _delete_selected_zone(self):
-        """Delete the selected zone"""
-        selection = self.zones_list_widget.curselection()
-        if not selection:
-            messagebox.showwarning("No Selection", "Please select a zone to delete")
-            return
-        
-        index = selection[0]
-        zone_name = self.zones_list_widget.get(index)
-        
-        # Confirm deletion
-        confirm = messagebox.askyesno("Confirm Deletion", f"Are you sure you want to delete the zone '{zone_name}'?")
-        if not confirm:
-            return
-        
-        # Remove from zone list
-        self.zones_list_widget.delete(index)
-        
-        # Remove from data structures
-        for i, zone in enumerate(self.zone_violations):
-            if zone['name'] == zone_name:
-                del self.zone_violations[i]
-                break
-        
-        if zone_name in self.zone_checkboxes:
-            del self.zone_checkboxes[zone_name]
-        
-        messagebox.showinfo("Success", f"Zone '{zone_name}' deleted")
 
 
 # ============================================================================
